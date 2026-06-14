@@ -1,0 +1,1 @@
+# Keep this directory so Docker build can copy public/ folder successfully

@@ -1,0 +1,87 @@
+
+services:
+
+  # ── Redis ───────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6381:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Django Backend ──────────────────────────────────────────
+  backend:
+    build:
+      context:    ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app
+      - media_files:/app/media
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_SECRET_KEY:    ${DJANGO_SECRET_KEY}
+      DEBUG:                ${DEBUG:-False}
+      DATABASE_URL:         ${DATABASE_URL}
+      REDIS_URL:            redis://redis:6379/0
+      ALLOWED_HOSTS:        ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      EMAIL_HOST:           ${EMAIL_HOST:-smtp.gmail.com}
+      EMAIL_HOST_USER:      ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD:  ${EMAIL_HOST_PASSWORD:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/api/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py seed_data &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120 --access-logfile -"
+
+  # ── Celery Worker ───────────────────────────────────────────
+  celery:
+    build:
+      context:    ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DATABASE_URL:      ${DATABASE_URL}
+      REDIS_URL:         redis://redis:6379/0
+    depends_on:
+      - backend
+      - redis
+    command: celery -A config worker --loglevel=info --concurrency=2
+
+  # ── Next.js Frontend ────────────────────────────────────────
+  frontend:
+    build:
+      context:    ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
+    depends_on:
+      - backend
+
+volumes:
+  redis_data:
+  media_files:
