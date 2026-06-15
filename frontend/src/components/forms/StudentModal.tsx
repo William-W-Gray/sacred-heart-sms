@@ -6,6 +6,7 @@ import { z } from "zod";
 import { X } from "lucide-react";
 import { useCreateStudent, useUpdateStudent, useClasses } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { Student } from "@/types";
 
 const schema = z.object({
@@ -74,12 +75,7 @@ export function StudentModal({ open, student, onClose }: Props) {
       }
       onClose();
     } catch (err: unknown) {
-      const detail = (err as { response?: { data?: { student_id?: string[] } } })
-        ?.response?.data?.student_id?.[0];
-      toast({
-        title: detail ?? "Failed to save student",
-        variant: "error",
-      });
+      toast({ title: getApiErrorMessage(err, "Failed to save student"), variant: "error" });
     }
   };
 

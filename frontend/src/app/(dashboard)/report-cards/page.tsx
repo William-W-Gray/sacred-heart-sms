@@ -2,6 +2,7 @@
 import { useState, useRef } from "react";
 import { Printer } from "lucide-react";
 import { useStudents, useReportCard } from "@/hooks/useApi";
+import { QueryError } from "@/components/shared/QueryError";
 import type { ReportCard, ReportCardSubject } from "@/types";
 
 const CONDUCT_CATEGORIES = [
@@ -49,7 +50,7 @@ function ReportCardView({ data, teacherComment, principalComment }: {
   principalComment: string;
 }) {
   // Totals row
-  const avgs = data.subjects.map((s) => s.year_average).filter(Boolean) as number[];
+  const avgs = (data.subjects ?? []).map((s) => s.year_average).filter(Boolean) as number[];
   const overallAvg = avgs.length ? safeAvg(...avgs) : null;
   const promoLabel = data.promotion.decision_display ?? "PENDING DECISION";
   const promoColor = data.promotion.decision ? PROMO_COLOR[data.promotion.decision] : "#888";
@@ -108,8 +109,8 @@ function ReportCardView({ data, teacherComment, principalComment }: {
             </tr>
           </thead>
           <tbody>
-            {data.subjects.length > 0
-              ? data.subjects.map((sub) => <SubjectRow key={sub.subject} sub={sub} />)
+            {data.subjects?.length
+              ? data.subjects?.map((sub) => <SubjectRow key={sub.subject} sub={sub} />)
               : <tr><td colSpan={9} style={{ textAlign: "center", padding: 14, color: "#aaa", fontSize: 12 }}>No marks recorded yet</td></tr>
             }
             {/* Average row */}
@@ -227,7 +228,7 @@ export default function ReportCardPage() {
   const printRef = useRef<HTMLDivElement>(null);
 
   const { data: students } = useStudents({ page_size: 500 });
-  const { data: rcData, isLoading } = useReportCard(Number(selStudent), !!selStudent);
+  const { data: rcData, isLoading, isError: rcError, refetch: refetchRc } = useReportCard(Number(selStudent), !!selStudent);
 
   const handlePrint = () => window.print();
 
@@ -275,13 +276,13 @@ export default function ReportCardPage() {
           <div className="card flex items-center justify-center h-64 text-[#5A6A8A] text-sm">
             Loading report card data…
           </div>
-        ) : rcData ? (
-          <div ref={printRef}>
-            <ReportCardView data={rcData} teacherComment={teacherComment} principalComment={principalComment} />
+        ) : rcError || !rcData ? (
+          <div className="card">
+            <QueryError resource="report card data" onRetry={refetchRc} />
           </div>
         ) : (
-          <div className="card flex items-center justify-center h-48 text-[#8A9ABB]">
-            Failed to load report card data
+          <div ref={printRef}>
+            <ReportCardView data={rcData} teacherComment={teacherComment} principalComment={principalComment} />
           </div>
         )}
       </div>

@@ -4,6 +4,8 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import { useTeachers, useDeleteTeacher, useSubjects } from "@/hooks/useApi";
 import { TeacherModal } from "@/components/forms/TeacherModal";
 import { useToast } from "@/components/ui/toaster";
+import { QueryError } from "@/components/shared/QueryError";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { Teacher } from "@/types";
 
 export default function TeachersPage() {
@@ -11,7 +13,7 @@ export default function TeachersPage() {
   const [editTeacher, setEdit]      = useState<Teacher | null>(null);
   const { toast } = useToast();
 
-  const { data, isLoading } = useTeachers({ page_size: 100 });
+  const { data, isLoading, isError, refetch } = useTeachers({ page_size: 100 });
   const { data: subjects }  = useSubjects();
   const deleteTeacher       = useDeleteTeacher();
 
@@ -20,7 +22,7 @@ export default function TeachersPage() {
   const handleDelete = async (t: Teacher) => {
     if (!confirm(`Delete ${t.full_name}?`)) return;
     try { await deleteTeacher.mutateAsync(t.id); toast({ title: "Teacher removed", variant: "success" }); }
-    catch { toast({ title: "Failed to delete", variant: "error" }); }
+    catch (err) { toast({ title: getApiErrorMessage(err, "Failed to delete teacher"), variant: "error" }); }
   };
 
   const subjectName = (id: number) => subjects?.results?.find((s) => s.id === id)?.name ?? `#${id}`;
@@ -43,6 +45,8 @@ export default function TeachersPage() {
         <div className="card overflow-hidden">
           {isLoading ? (
             <div className="flex items-center justify-center h-48 text-[#5A6A8A] text-sm">Loading teachers…</div>
+          ) : isError ? (
+            <QueryError resource="teachers" onRetry={refetch} />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">

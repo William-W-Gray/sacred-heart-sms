@@ -6,6 +6,8 @@ import { StudentModal } from "@/components/forms/StudentModal";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { GradeCell } from "@/components/shared/GradeCell";
 import { useToast } from "@/components/ui/toaster";
+import { QueryError } from "@/components/shared/QueryError";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 import Link from "next/link";
 import type { Student } from "@/types";
 
@@ -17,7 +19,7 @@ export default function StudentsPage() {
   const [editStudent, setEditStudent] = useState<Student | null>(null);
   const { toast } = useToast();
 
-  const { data, isLoading } = useStudents({
+  const { data, isLoading, isError, refetch } = useStudents({
     search: search || undefined,
     current_class: classFilter || undefined,
     page,
@@ -35,8 +37,8 @@ export default function StudentsPage() {
     try {
       await deleteStudent.mutateAsync(student.id);
       toast({ title: "Student removed", variant: "success" });
-    } catch {
-      toast({ title: "Failed to delete student", variant: "error" });
+    } catch (err) {
+      toast({ title: getApiErrorMessage(err, "Failed to delete student"), variant: "error" });
     }
   };
 
@@ -87,6 +89,8 @@ export default function StudentsPage() {
             <div className="flex items-center justify-center h-64 text-[#5A6A8A] text-sm">
               Loading students…
             </div>
+          ) : isError ? (
+            <QueryError resource="students" onRetry={refetch} />
           ) : students.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-[#8A9ABB]">
               <div className="text-4xl mb-3">🎓</div>

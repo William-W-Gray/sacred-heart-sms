@@ -3,6 +3,8 @@ import { useState } from "react";
 import { Save } from "lucide-react";
 import { useAcademicYears, useGradingScales } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
+import { QueryError } from "@/components/shared/QueryError";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 import { marksApi } from "@/lib/api/services";
 
 const GRADE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
@@ -15,8 +17,8 @@ const GRADE_COLORS: Record<string, { bg: string; border: string; text: string }>
 
 export default function SettingsPage() {
   const { toast }       = useToast();
-  const { data: years } = useAcademicYears();
-  const { data: scaleData } = useGradingScales();
+  const { data: years, isError: yearsError, refetch: refetchYears } = useAcademicYears();
+  const { data: scaleData, isError: scalesError, refetch: refetchScales } = useGradingScales();
   const scales = scaleData?.results ?? [];
 
   const [schoolName, setSchoolName]   = useState("Sacred Heart Catholic High School");
@@ -43,8 +45,8 @@ export default function SettingsPage() {
       }
       setScaleDraft({});
       toast({ title: "Grading scale saved", variant: "success" });
-    } catch {
-      toast({ title: "Failed to save grading scale", variant: "error" });
+    } catch (err) {
+      toast({ title: getApiErrorMessage(err, "Failed to save grading scale"), variant: "error" });
     } finally {
       setSavingScale(false);
     }
@@ -116,6 +118,9 @@ export default function SettingsPage() {
                 {savingScale ? "Saving…" : "Save Scale"}
               </button>
             </div>
+            {scalesError ? (
+              <QueryError resource="grading scale" onRetry={refetchScales} />
+            ) : (
             <div className="space-y-2">
               {scales.map((scale) => {
                 const gc = GRADE_COLORS[scale.grade_letter] ?? GRADE_COLORS.F;
@@ -152,12 +157,16 @@ export default function SettingsPage() {
                 </p>
               )}
             </div>
+            )}
           </div>
         </div>
 
         {/* Academic years */}
         <div className="card p-6">
           <h3 className="text-sm font-semibold text-navy mb-4">Academic Years</h3>
+          {yearsError ? (
+            <QueryError resource="academic years" onRetry={refetchYears} />
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <thead className="bg-[var(--surface)]">
@@ -182,6 +191,7 @@ export default function SettingsPage() {
               </tbody>
             </table>
           </div>
+          )}
         </div>
       </div>
     </>

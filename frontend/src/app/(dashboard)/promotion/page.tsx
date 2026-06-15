@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Save } from "lucide-react";
 import { useStudents, usePromotions, useUpsertPromotion, useClasses } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
+import { QueryError } from "@/components/shared/QueryError";
 import type { PromotionDecisionType } from "@/types";
 
 const DECISION_OPTIONS: { value: PromotionDecisionType; label: string }[] = [
@@ -26,8 +27,8 @@ export default function PromotionPage() {
   const [notes,     setNotes]     = useState<Record<number, string>>({});
 
   const { data: classes }    = useClasses();
-  const { data: students }   = useStudents(selClass ? { current_class: selClass, status: "active", page_size: 100 } : undefined);
-  const { data: promoData }  = usePromotions(selClass ? { current_class: selClass, page_size: 100 } : undefined);
+  const { data: students, isError: studentsError, refetch: refetchStudents } = useStudents(selClass ? { current_class: selClass, status: "active", page_size: 100 } : undefined);
+  const { data: promoData, isError: promosError, refetch: refetchPromos } = usePromotions(selClass ? { current_class: selClass, page_size: 100 } : undefined);
   const upsertPromo          = useUpsertPromotion();
 
   const studs  = students?.results ?? [];
@@ -126,6 +127,10 @@ export default function PromotionPage() {
           <div className="card flex flex-col items-center justify-center h-64 text-[#8A9ABB]">
             <div className="text-4xl mb-3">🏆</div>
             <p className="font-medium">Select a class to manage promotion decisions</p>
+          </div>
+        ) : studentsError || promosError ? (
+          <div className="card">
+            <QueryError resource="promotion data" onRetry={() => { refetchStudents(); refetchPromos(); }} />
           </div>
         ) : studs.length === 0 ? (
           <div className="card flex items-center justify-center h-48 text-[#8A9ABB] text-sm">

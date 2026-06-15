@@ -6,6 +6,7 @@ import { z } from "zod";
 import { X } from "lucide-react";
 import { useCreateTeacher, useUpdateTeacher, useSubjects, useClasses } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { Teacher } from "@/types";
 
 const schema = z.object({
@@ -83,8 +84,8 @@ export function TeacherModal({ open, teacher, onClose }: Props) {
         toast({ title: `${data.full_name} added`, variant: "success" });
       }
       onClose();
-    } catch {
-      toast({ title: "Failed to save teacher", variant: "error" });
+    } catch (err) {
+      toast({ title: getApiErrorMessage(err, "Failed to save teacher"), variant: "error" });
     }
   };
 

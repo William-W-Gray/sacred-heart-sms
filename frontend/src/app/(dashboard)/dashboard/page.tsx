@@ -1,6 +1,7 @@
 "use client";
 import { GraduationCap, Users, TrendingUp, AlertCircle, Plus, BarChart2, FileText, CreditCard } from "lucide-react";
 import { useStudents, useTeachers, useInvoices, useAcademicYears } from "@/hooks/useApi";
+import { QueryError } from "@/components/shared/QueryError";
 import Link from "next/link";
 
 function StatCard({
@@ -36,12 +37,14 @@ function StatCard({
 }
 
 export default function DashboardPage() {
-  const { data: students, isLoading: studentsLoading } = useStudents();
-  const { data: teachers, isLoading: teachersLoading } = useTeachers();
-  const { data: invoices, isLoading: invoicesLoading } = useInvoices({ page_size: 1000 });
-  const { data: years }     = useAcademicYears();
+  const { data: students, isLoading: studentsLoading, isError: studentsError, refetch: refetchStudents } = useStudents();
+  const { data: teachers, isLoading: teachersLoading, isError: teachersError, refetch: refetchTeachers } = useTeachers();
+  const { data: invoices, isLoading: invoicesLoading, isError: invoicesError, refetch: refetchInvoices } = useInvoices({ page_size: 1000 });
+  const { data: years, isError: yearsError, refetch: refetchYears } = useAcademicYears();
 
   const isLoading = studentsLoading || teachersLoading || invoicesLoading;
+  const hasError  = studentsError || teachersError || invoicesError || yearsError;
+  const retryAll  = () => { refetchStudents(); refetchTeachers(); refetchInvoices(); refetchYears(); };
 
   const totalStudents = students?.count ?? 0;
   const totalTeachers = teachers?.count ?? 0;
@@ -99,12 +102,18 @@ export default function DashboardPage() {
         </div>
 
         {/* Stats */}
+        {hasError ? (
+          <div className="card">
+            <QueryError resource="dashboard data" onRetry={retryAll} />
+          </div>
+        ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard label="Total Students" value={String(totalStudents)} change="Active enrolments" changeType="neutral" icon={GraduationCap} accent="bg-gradient-to-r from-[#C8A84B] to-[#E8C96A]" isLoading={isLoading} />
           <StatCard label="Teaching Staff"  value={String(totalTeachers)} change="Across all departments" changeType="neutral" icon={Users} accent="bg-gradient-to-r from-navy to-navy-light" isLoading={isLoading} />
           <StatCard label="Fee Collection"  value={`${collRate}%`} change={`L$${totalPaid.toLocaleString()} collected`} changeType="up" icon={TrendingUp} accent="bg-gradient-to-r from-[#1B6B3A] to-[#2A9D5C]" isLoading={isLoading} />
           <StatCard label="Outstanding Fees" value={`L$${outstanding.toLocaleString()}`} change={`${overdueCount} overdue invoices`} changeType={overdueCount > 0 ? "down" : "neutral"} icon={AlertCircle} accent="bg-gradient-to-r from-crimson to-crimson-light" isLoading={isLoading} />
         </div>
+        )}
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

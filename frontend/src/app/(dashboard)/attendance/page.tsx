@@ -3,6 +3,8 @@ import { useState, useCallback } from "react";
 import { Save, BarChart2 } from "lucide-react";
 import { useStudents, useClasses, useSubjects, useAttendance, useSaveAttendanceBulk } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
+import { QueryError } from "@/components/shared/QueryError";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { AttendanceStatus } from "@/types";
 
 const STATUS_STYLES: Record<AttendanceStatus, string> = {
@@ -24,7 +26,7 @@ export default function AttendancePage() {
 
   const { data: classes  } = useClasses();
   const { data: subjects } = useSubjects();
-  const { data: students } = useStudents(selClass ? { current_class: selClass, page_size: 100 } : undefined);
+  const { data: students, isError: studentsError, refetch: refetchStudents } = useStudents(selClass ? { current_class: selClass, page_size: 100 } : undefined);
 
   const { data: savedAttendance } = useAttendance(
     selClass && selSubject && selDate
@@ -66,8 +68,8 @@ export default function AttendancePage() {
       await saveAttendance.mutateAsync(records);
       setDrafts({});
       toast({ title: `Attendance saved for ${records.length} students`, variant: "success" });
-    } catch {
-      toast({ title: "Failed to save attendance", variant: "error" });
+    } catch (err) {
+      toast({ title: getApiErrorMessage(err, "Failed to save attendance"), variant: "error" });
     }
   };
 
@@ -124,6 +126,10 @@ export default function AttendancePage() {
           <div className="card flex flex-col items-center justify-center h-64 text-[#8A9ABB]">
             <div className="text-4xl mb-3">📅</div>
             <p className="font-medium">Select class and subject to record attendance</p>
+          </div>
+        ) : studentsError ? (
+          <div className="card">
+            <QueryError resource="students" onRetry={refetchStudents} />
           </div>
         ) : studs.length === 0 ? (
           <div className="card flex flex-col items-center justify-center h-48 text-[#8A9ABB]">

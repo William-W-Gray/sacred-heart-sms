@@ -123,6 +123,11 @@ class StudentViewSet(viewsets.ModelViewSet):
             return qs.filter(current_class_id__in=class_ids)
         return qs  # admin sees all
 
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [permissions.IsAuthenticated(), IsAdminUser()]
+        return [permissions.IsAuthenticated()]
+
     @action(detail=True, methods=["get"])
     def report_card(self, request, pk=None):
         """Full data payload consumed by the report-card generator."""
@@ -143,9 +148,24 @@ class GuardianViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        qs   = super().get_queryset()
         if user.role == "guardian":
-            return Guardian.objects.filter(user=user)
-        return super().get_queryset()
+            return qs.filter(user=user)
+        if user.role == "student":
+            return qs.filter(students__user=user).distinct()
+        if user.role == "teacher":
+            teacher = getattr(user, "teacher_profile", None)
+            if not teacher:
+                return qs.none()
+            class_ids = teacher.assignments.filter(is_active=True).values_list(
+                "assigned_class_id", flat=True)
+            return qs.filter(students__current_class_id__in=class_ids).distinct()
+        return qs  # admin sees all
+
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [permissions.IsAuthenticated(), IsAdminUser()]
+        return [permissions.IsAuthenticated()]
 
 
 class ClassViewSet(viewsets.ModelViewSet):
@@ -155,17 +175,32 @@ class ClassViewSet(viewsets.ModelViewSet):
     filter_backends    = [DjangoFilterBackend]
     filterset_fields   = ["academic_year", "grade"]
 
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [permissions.IsAuthenticated(), IsAdminUser()]
+        return [permissions.IsAuthenticated()]
+
 
 class SubjectViewSet(viewsets.ModelViewSet):
     queryset           = Subject.objects.all()
     serializer_class   = SubjectSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [permissions.IsAuthenticated(), IsAdminUser()]
+        return [permissions.IsAuthenticated()]
+
 
 class AcademicYearViewSet(viewsets.ModelViewSet):
     queryset           = AcademicYear.objects.all()
     serializer_class   = AcademicYearSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [permissions.IsAuthenticated(), IsAdminUser()]
+        return [permissions.IsAuthenticated()]
 
 
 class SemesterViewSet(viewsets.ModelViewSet):
@@ -174,3 +209,8 @@ class SemesterViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     filter_backends    = [DjangoFilterBackend]
     filterset_fields   = ["academic_year", "number", "is_active"]
+
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [permissions.IsAuthenticated(), IsAdminUser()]
+        return [permissions.IsAuthenticated()]

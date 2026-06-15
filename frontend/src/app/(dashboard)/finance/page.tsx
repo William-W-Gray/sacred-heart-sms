@@ -4,6 +4,8 @@ import { Plus, Receipt, Trash2, CreditCard } from "lucide-react";
 import { useInvoices, useCreateInvoice, useCreatePayment, useDeleteInvoice, useStudents } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { QueryError } from "@/components/shared/QueryError";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { Invoice, PaymentMethod } from "@/types";
 
 function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -18,7 +20,7 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
       await createInvoice.mutateAsync({ student: Number(form.student), fee_type: form.type, amount: Number(form.amount), due_date: form.dueDate, notes: form.notes });
       toast({ title: "Invoice created", variant: "success" });
       onClose();
-    } catch { toast({ title: "Failed to create invoice", variant: "error" }); }
+    } catch (err) { toast({ title: getApiErrorMessage(err, "Failed to create invoice"), variant: "error" }); }
   };
 
   if (!open) return null;
@@ -78,7 +80,7 @@ function PaymentModal({ invoice, onClose }: { invoice: Invoice; onClose: () => v
       await createPayment.mutateAsync({ invoice: invoice.id, amount: Number(form.amount), method: form.method, reference_number: form.ref, payment_date: form.date, notes: form.notes });
       toast({ title: `L$${Number(form.amount).toLocaleString()} recorded`, variant: "success" });
       onClose();
-    } catch { toast({ title: "Failed to record payment", variant: "error" }); }
+    } catch (err) { toast({ title: getApiErrorMessage(err, "Failed to record payment"), variant: "error" }); }
   };
 
   return (
@@ -126,7 +128,7 @@ export default function FinancePage() {
   const [payInvoice, setPayInv]   = useState<Invoice | null>(null);
   const { toast } = useToast();
 
-  const { data, isLoading } = useInvoices({ page, page_size: 20 });
+  const { data, isLoading, isError, refetch } = useInvoices({ page, page_size: 20 });
   const deleteInvoice = useDeleteInvoice();
 
   const invoices   = data?.results ?? [];
@@ -141,7 +143,7 @@ export default function FinancePage() {
   const handleDelete = async (id: number) => {
     if (!confirm("Delete this invoice and all its payments?")) return;
     try { await deleteInvoice.mutateAsync(id); toast({ title: "Invoice deleted", variant: "success" }); }
-    catch { toast({ title: "Failed to delete", variant: "error" }); }
+    catch (err) { toast({ title: getApiErrorMessage(err, "Failed to delete invoice"), variant: "error" }); }
   };
 
   return (
@@ -178,6 +180,8 @@ export default function FinancePage() {
         <div className="card overflow-hidden">
           {isLoading ? (
             <div className="flex items-center justify-center h-48 text-[#5A6A8A] text-sm">Loading invoices…</div>
+          ) : isError ? (
+            <QueryError resource="invoices" onRetry={refetch} />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">

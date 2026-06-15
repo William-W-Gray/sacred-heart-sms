@@ -3,6 +3,8 @@ import { useState, useCallback } from "react";
 import { Save } from "lucide-react";
 import { useStudents, useClasses, useSubjects, useMarks, useSaveMarksBulk, useGradingScales, useAcademicYears } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
+import { QueryError } from "@/components/shared/QueryError";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { Mark } from "@/types";
 
 // ── Grading helper (uses DB scale) ──────────────────────────────
@@ -45,7 +47,7 @@ export default function MarksPage() {
   const { data: scaleData } = useGradingScales();
   const scale = scaleData?.results ?? [];
 
-  const { data: students } = useStudents(
+  const { data: students, isError: studentsError, refetch: refetchStudents } = useStudents(
     selClass ? { current_class: selClass, page_size: 100 } : undefined,
   );
 
@@ -99,8 +101,8 @@ export default function MarksPage() {
       const res = await saveMarks.mutateAsync(records);
       setDrafts({});
       toast({ title: `Marks saved — ${res.created} created, ${res.updated} updated`, variant: "success" });
-    } catch {
-      toast({ title: "Failed to save marks", variant: "error" });
+    } catch (err) {
+      toast({ title: getApiErrorMessage(err, "Failed to save marks"), variant: "error" });
     }
   };
 
@@ -149,6 +151,10 @@ export default function MarksPage() {
             <div className="text-4xl mb-3">📊</div>
             <p className="font-medium">Select a class and subject to begin</p>
             <p className="text-sm mt-1">Marks will load automatically</p>
+          </div>
+        ) : studentsError ? (
+          <div className="card">
+            <QueryError resource="students" onRetry={refetchStudents} />
           </div>
         ) : studs.length === 0 ? (
           <div className="card flex flex-col items-center justify-center h-48 text-[#8A9ABB]">

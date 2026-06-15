@@ -3,6 +3,8 @@ import { useState } from "react";
 import { Plus, Pencil, Trash2, Mail, Phone } from "lucide-react";
 import { useGuardians, useCreateGuardian, useStudents } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
+import { QueryError } from "@/components/shared/QueryError";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 import { api } from "@/lib/api/client";
 import type { Guardian } from "@/types";
 
@@ -40,8 +42,8 @@ function GuardianModal({
         toast({ title: `${form.full_name} added`, variant: "success" });
       }
       onClose();
-    } catch {
-      toast({ title: "Failed to save guardian", variant: "error" });
+    } catch (err) {
+      toast({ title: getApiErrorMessage(err, "Failed to save guardian"), variant: "error" });
     } finally {
       setSaving(false);
     }
@@ -109,7 +111,7 @@ export default function GuardiansPage() {
   const [editGuardian, setEdit]     = useState<Guardian | null>(null);
   const { toast } = useToast();
 
-  const { data, isLoading } = useGuardians({ page_size: 100 });
+  const { data, isLoading, isError, refetch } = useGuardians({ page_size: 100 });
   const guardians = data?.results ?? [];
 
   const handleDelete = async (g: Guardian) => {
@@ -117,8 +119,8 @@ export default function GuardiansPage() {
     try {
       await api.delete(`/api/guardians/${g.id}/`);
       toast({ title: "Guardian removed", variant: "success" });
-    } catch {
-      toast({ title: "Failed to delete guardian", variant: "error" });
+    } catch (err) {
+      toast({ title: getApiErrorMessage(err, "Failed to delete guardian"), variant: "error" });
     }
   };
 
@@ -140,6 +142,8 @@ export default function GuardiansPage() {
         <div className="card overflow-hidden">
           {isLoading ? (
             <div className="flex items-center justify-center h-48 text-[#5A6A8A] text-sm">Loading guardians…</div>
+          ) : isError ? (
+            <QueryError resource="guardians" onRetry={refetch} />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">

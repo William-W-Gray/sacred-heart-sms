@@ -3,11 +3,13 @@ import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import { useClasses, useSubjects, useCreateClass, useCreateSubject, useDeleteSubject } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
+import { QueryError } from "@/components/shared/QueryError";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 
 export default function ClassesPage() {
   const { toast } = useToast();
-  const { data: classes  } = useClasses();
-  const { data: subjects } = useSubjects();
+  const { data: classes,  isError: classesError,  refetch: refetchClasses  } = useClasses();
+  const { data: subjects, isError: subjectsError, refetch: refetchSubjects } = useSubjects();
   const createClass   = useCreateClass();
   const createSubject = useCreateSubject();
   const deleteSubject = useDeleteSubject();
@@ -23,8 +25,8 @@ export default function ClassesPage() {
       await createClass.mutateAsync({ grade: Number(classForm.grade), section: classForm.section, name: classForm.grade + classForm.section } as Parameters<typeof createClass.mutateAsync>[0]);
       toast({ title: `Grade ${classForm.grade}${classForm.section} added`, variant: "success" });
       setShowClassForm(false);
-    } catch {
-      toast({ title: "Failed to add class. It may already exist.", variant: "error" });
+    } catch (err) {
+      toast({ title: getApiErrorMessage(err, "Failed to add class. It may already exist."), variant: "error" });
     }
   };
 
@@ -35,15 +37,15 @@ export default function ClassesPage() {
       toast({ title: `"${subjectForm.name}" added`, variant: "success" });
       setSubjectForm({ name: "", code: "" });
       setShowSubjectForm(false);
-    } catch {
-      toast({ title: "Failed to add subject. Code may already exist.", variant: "error" });
+    } catch (err) {
+      toast({ title: getApiErrorMessage(err, "Failed to add subject. Code may already exist."), variant: "error" });
     }
   };
 
   const handleDeleteSubject = async (id: number, name: string) => {
     if (!confirm(`Remove subject "${name}"?`)) return;
     try { await deleteSubject.mutateAsync(id); toast({ title: `"${name}" removed`, variant: "success" }); }
-    catch { toast({ title: "Failed to remove subject", variant: "error" }); }
+    catch (err) { toast({ title: getApiErrorMessage(err, "Failed to remove subject"), variant: "error" }); }
   };
 
   return (
@@ -99,6 +101,9 @@ export default function ClassesPage() {
               </div>
             )}
 
+            {classesError ? (
+              <QueryError resource="classes" onRetry={refetchClasses} />
+            ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">
                 <thead className="bg-[var(--surface)]">
@@ -122,6 +127,7 @@ export default function ClassesPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </div>
 
           {/* Subjects */}
@@ -155,6 +161,9 @@ export default function ClassesPage() {
               </div>
             )}
 
+            {subjectsError ? (
+              <QueryError resource="subjects" onRetry={refetchSubjects} />
+            ) : (
             <div className="flex flex-wrap gap-2">
               {subjects?.results?.map((sub) => (
                 <div key={sub.id} className="flex items-center gap-1.5 bg-navy-pale border border-navy/15 rounded-full px-3 py-1.5">
@@ -173,6 +182,7 @@ export default function ClassesPage() {
                 <p className="text-sm text-[#8A9ABB]">No subjects configured yet</p>
               )}
             </div>
+            )}
           </div>
         </div>
       </div>

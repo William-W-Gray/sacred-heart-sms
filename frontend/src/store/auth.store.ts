@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import { jwtDecode } from "jwt-decode";
 import { setTokens, clearTokens } from "@/lib/api/client";
 import { authApi } from "@/lib/api/services";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { AuthUser, JWTPayload, UserRole } from "@/types";
 
 interface AuthState {
@@ -36,10 +37,7 @@ export const useAuthStore = create<AuthState>()(
           const user = await authApi.me();
           set({ user, role: payload.role, isAuthenticated: true, isLoading: false });
         } catch (err: unknown) {
-          const msg =
-            (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
-            "Invalid credentials.";
-          set({ error: msg, isLoading: false });
+          set({ error: getApiErrorMessage(err, "Invalid credentials."), isLoading: false });
           throw err;
         }
       },

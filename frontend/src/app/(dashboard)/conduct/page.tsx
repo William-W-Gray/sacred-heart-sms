@@ -3,6 +3,8 @@ import { useState, useCallback } from "react";
 import { Save } from "lucide-react";
 import { useStudents, useConductCategories, useConductRatings, useSaveConductBulk } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
+import { QueryError } from "@/components/shared/QueryError";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 
 export default function ConductPage() {
   const { toast }              = useToast();
@@ -11,7 +13,7 @@ export default function ConductPage() {
   const [ratings, setRatings]  = useState<Record<string, 1 | 2 | 3 | 4 | 5 | 6>>({});
 
   const { data: students }    = useStudents({ page_size: 500 });
-  const { data: catData }     = useConductCategories();
+  const { data: catData, isError: catError, refetch: refetchCat } = useConductCategories();
   const { data: savedRatings } = useConductRatings(
     selStudent ? { student: selStudent, semester__number: selSem } : undefined,
   );
@@ -42,8 +44,8 @@ export default function ConductPage() {
       await saveConduct.mutateAsync(records);
       setRatings({});
       toast({ title: `Conduct ratings saved for ${categories.length} categories`, variant: "success" });
-    } catch {
-      toast({ title: "Failed to save conduct ratings", variant: "error" });
+    } catch (err) {
+      toast({ title: getApiErrorMessage(err, "Failed to save conduct ratings"), variant: "error" });
     }
   };
 
@@ -130,7 +132,9 @@ export default function ConductPage() {
                 {stu && <span className="badge-ok">Sem {selSem}</span>}
               </div>
               <div className="divide-y divide-[var(--border)]">
-                {categories.length === 0 ? (
+                {catError ? (
+                  <QueryError resource="conduct categories" onRetry={refetchCat} />
+                ) : categories.length === 0 ? (
                   <div className="flex items-center justify-center h-48 text-[#8A9ABB]">
                     Loading categories…
                   </div>
