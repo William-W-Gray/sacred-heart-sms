@@ -113,6 +113,10 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 25,
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    # Scoped throttle rates. No DEFAULT_THROTTLE_CLASSES is set, so normal
+    # API traffic is unaffected — only views that opt in via throttle_classes
+    # (e.g. SMSTokenView's "login" scope) are rate-limited.
+    "DEFAULT_THROTTLE_RATES": {"login": "5/min"},
 }
 
 # ── JWT ─────────────────────────────────────────────────────────
@@ -159,10 +163,35 @@ SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
 SECURE_HSTS_PRELOAD = not DEBUG
 
-# ── Celery ──────────────────────────────────────────────────────
-CELERY_BROKER_URL    = os.environ.get("REDIS_URL", "redis://redis:6379/0")
-CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+# ── Celery / Cache (Redis) ────────────────────────────────────────
+REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
+
+CELERY_BROKER_URL    = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_TASK_SERIALIZER = "json"
+
+# Shared cache backend for DRF throttling (e.g. the "login" scope below).
+# The default per-process LocMemCache isn't shared across gunicorn's
+# --workers, so a rate limit would only be enforced per-worker.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+    }
+}
+
+# Upstash (and most managed Redis) use rediss:// (TLS). Kombu's redis
+# transport requires explicit SSL config for rediss:// URLs, otherwise it
+# raises "A rediss:// URL must have parameter ssl_cert_reqs" on worker start.
+# redis-py (used by the cache backend above) needs the same relaxed
+# certificate check.
+if REDIS_URL.startswith("rediss://"):
+    import ssl
+    CELERY_BROKER_USE_SSL = {"ssl_cert_reqs": ssl.CERT_NONE}
+    CELERY_REDIS_BACKEND_USE_SSL = {"ssl_cert_reqs": ssl.CERT_NONE}
+    CACHES["default"]["OPTIONS"] = {
+        "CONNECTION_POOL_KWARGS": {"ssl_cert_reqs": ssl.CERT_NONE}
+    }
 
 # ── Email ───────────────────────────────────────────────────────
 EMAIL_BACKEND       = "django.core.mail.backends.smtp.EmailBackend"

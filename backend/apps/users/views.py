@@ -1,6 +1,7 @@
 from rest_framework import serializers, viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -17,8 +18,13 @@ class SMSTokenSerializer(TokenObtainPairSerializer):
         return token
 
 
+class LoginRateThrottle(AnonRateThrottle):
+    scope = "login"
+
+
 class SMSTokenView(TokenObtainPairView):
     serializer_class = SMSTokenSerializer
+    throttle_classes = [LoginRateThrottle]
 
 
 # ── User serializers ────────────────────────────────────────────
@@ -107,7 +113,40 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({"detail": "All notifications marked as read."})
 
 
-# ── Permission class ────────────────────────────────────────────
+# ── Permission classes ──────────────────────────────────────────
 class IsAdminUser(permissions.BasePermission):
     def has_permission(self, request, view) -> bool:
         return bool(request.user and request.user.is_authenticated and request.user.is_admin)
+
+
+class IsAdminOrTeacher(permissions.BasePermission):
+    def has_permission(self, request, view) -> bool:
+        return bool(request.user and request.user.is_authenticated
+                     and request.user.role in ("admin", "teacher"))
+
+
+# ── RBAC queryset scoping ────────────────────────────────────────
+def scope_to_own_student(qs, user, prefix="student", teacher_sees_classes=True):
+    """Row-level RBAC for querysets that hang off a Student FK, directly or
+    via a relation chain (e.g. prefix="invoice__student").
+
+    - student  -> only their own record
+    - guardian -> only their linked students' records
+    - teacher  -> records for students in their actively-assigned classes
+                  (or none() if teacher_sees_classes=False, e.g. finance)
+    - admin    -> unrestricted
+    """
+    if user.role == "student":
+        return qs.filter(**{f"{prefix}__user": user})
+    if user.role == "guardian":
+        return qs.filter(**{f"{prefix}__guardians__user": user}).distinct()
+    if user.role == "teacher":
+        if not teacher_sees_classes:
+            return qs.none()
+        teacher = getattr(user, "teacher_profile", None)
+        if not teacher:
+            return qs.none()
+        class_ids = teacher.assignments.filter(is_active=True).values_list(
+            "assigned_class_id", flat=True)
+        return qs.filter(**{f"{prefix}__current_class_id__in": class_ids})
+    return qs  # admin sees all

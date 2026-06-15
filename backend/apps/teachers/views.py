@@ -41,6 +41,11 @@ class TeacherViewSet(viewsets.ModelViewSet):
     search_fields      = ["full_name", "email", "department"]
     filterset_fields   = ["is_active", "department"]
 
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [permissions.IsAuthenticated(), IsAdminUser()]
+        return [permissions.IsAuthenticated()]
+
 
 class TeacherAssignmentViewSet(viewsets.ModelViewSet):
     queryset = TeacherAssignment.objects.select_related(
@@ -50,3 +55,8 @@ class TeacherAssignmentViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     filter_backends    = [DjangoFilterBackend]
     filterset_fields   = ["teacher", "assigned_class", "subject", "academic_year", "is_active"]
+
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [permissions.IsAuthenticated(), IsAdminUser()]
+        return [permissions.IsAuthenticated()]

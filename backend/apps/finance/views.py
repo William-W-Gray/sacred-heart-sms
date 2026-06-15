@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import Invoice, Payment, Receipt
+from apps.users.views import IsAdminUser, scope_to_own_student
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -53,6 +54,15 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     filter_backends    = [DjangoFilterBackend]
     filterset_fields   = ["student", "status", "semester", "fee_type"]
 
+    def get_queryset(self):
+        return scope_to_own_student(super().get_queryset(), self.request.user,
+                                      prefix="student", teacher_sees_classes=False)
+
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [permissions.IsAuthenticated(), IsAdminUser()]
+        return [permissions.IsAuthenticated()]
+
 
 class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.select_related("invoice", "received_by").all()
@@ -60,6 +70,15 @@ class PaymentViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     filter_backends    = [DjangoFilterBackend]
     filterset_fields   = ["invoice", "method", "is_verified"]
+
+    def get_queryset(self):
+        return scope_to_own_student(super().get_queryset(), self.request.user,
+                                      prefix="invoice__student", teacher_sees_classes=False)
+
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [permissions.IsAuthenticated(), IsAdminUser()]
+        return [permissions.IsAuthenticated()]
 
     def perform_create(self, serializer):
         serializer.save(received_by=self.request.user)
@@ -69,3 +88,7 @@ class ReceiptViewSet(viewsets.ReadOnlyModelViewSet):
     queryset           = Receipt.objects.select_related("payment").all()
     serializer_class   = ReceiptSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return scope_to_own_student(super().get_queryset(), self.request.user,
+                                      prefix="payment__invoice__student", teacher_sees_classes=False)
