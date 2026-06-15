@@ -19,7 +19,8 @@ ENV STATIC_ROOT=/staticfiles
 
 # Non-root user for security
 RUN useradd -m -u 1001 appuser && chown -R appuser:appuser /app \
-    && mkdir -p /staticfiles && chown appuser:appuser /staticfiles
+    && mkdir -p /staticfiles && chown appuser:appuser /staticfiles \
+    && chmod +x docker-entrypoint.sh
 USER appuser
 
 EXPOSE 8000
