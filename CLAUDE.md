@@ -28,6 +28,7 @@ pip install -r requirements.txt
 export DJANGO_SECRET_KEY=dev DATABASE_URL=postgresql://...neon.tech/neondb?sslmode=require DEBUG=True
 python manage.py migrate
 python manage.py seed_data        # idempotent demo data (academic year, subjects, grading scale, users)
+python manage.py seed_essentials  # prod-safe subset of the above — reference data only, no demo accounts
 python manage.py runserver        # http://localhost:8000
 ```
 `SECRET_KEY` is read directly from `os.environ[...]` in `config/settings.py` — required or Django fails at import time.
@@ -62,6 +63,16 @@ npm run type-check    # tsc --noEmit
 - `docker-compose.yml`'s `backend` service has a `healthcheck` that curls `/api/health/` every 30s (`docker ps` shows `(healthy)`/`(unhealthy)`) — uses `127.0.0.1` not `localhost`, since the container's `/etc/hosts` resolves `localhost` to `::1` first and gunicorn only binds `0.0.0.0` (IPv4), so `localhost` fails instantly. Once the app has a public URL, add an external uptime monitor (e.g. UptimeRobot) pointed at `https://<domain>/api/health/`.
 - `LOGGING` in `config/settings.py` always logs to stdout (`docker logs`) regardless of `DEBUG` — Django's default config silences the console handler when `DEBUG=False`, which would otherwise hide `django.request` tracebacks (incl. DB `OperationalError`/`InterfaceError` from dropped Neon connections). Set `DB_LOG_LEVEL=DEBUG` to additionally log every SQL statement with timing (via a `connection_created` signal that sets `force_debug_cursor`, since Django normally only does this when `DEBUG=True`) — useful for diagnosing slow queries against Neon, but noisy, so leave unset normally.
 
+### Deployment (Render + Vercel + Cloudflare R2 + Upstash)
+
+Production target: backend on **Render** (Docker web service + Celery worker, both defined in `render.yaml` at the repo root), frontend on **Vercel**, DB on **Neon** (already covered above), Redis/Celery broker on **Upstash**, media storage on **Cloudflare R2**. Full step-by-step instructions live in `DEPLOYMENT.md` — this section just orients you to the relevant settings.
+
+- **Static files**: `whitenoise.middleware.WhiteNoiseMiddleware` (right after `SecurityMiddleware`) + `STORAGES["staticfiles"]` = `whitenoise.storage.CompressedManifestStaticFilesStorage` serve Django admin/DRF browsable-API assets directly from gunicorn — no separate static file server needed on Render.
+- **Media storage** (`STORAGES["default"]`) is env-gated: if `AWS_STORAGE_BUCKET_NAME` is set, uploads (student/teacher photos, receipts) go to an S3-compatible bucket (Cloudflare R2) via `django-storages`/`boto3`, configured with `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_ENDPOINT_URL`, `AWS_S3_REGION_NAME` (`auto` for R2), `AWS_S3_CUSTOM_DOMAIN`. If unset, falls back to local `MEDIA_ROOT` (fine for docker-compose/local dev, but ephemeral on Render — files vanish on redeploy).
+- **Reverse-proxy correctness**: `SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")` (Render terminates TLS at the edge); `CSRF_TRUSTED_ORIGINS` and `CORS_ALLOWED_ORIGIN_REGEXES` (both comma-separated env vars, default empty) — the former is required for Django admin login on the `*.onrender.com` domain, the latter matches Vercel preview deployment URLs (e.g. `^https://sacred-heart-sms-.*\.vercel\.app$`) in addition to `CORS_ALLOWED_ORIGINS`. `SESSION_COOKIE_SECURE`/`CSRF_COOKIE_SECURE` are `True` whenever `DEBUG=False`.
+- **render.yaml** blueprint defines two services from `backend/Dockerfile`: `sacred-heart-backend` (web, `healthCheckPath: /api/health/`, runs `migrate && seed_essentials && gunicorn`) and `sacred-heart-celery` (worker, runs the Celery worker — both require the `starter` plan since Render's free tier doesn't support background workers).
+- **`seed_essentials` vs `seed_data`**: Render runs `seed_essentials` (reference data only, see below) on every deploy — never `seed_data`, which creates demo accounts with published passwords. The real admin is created once via `python manage.py createsuperuser` (Render Shell).
+
 ### Backend — Django apps (`backend/apps/`)
 
 All API routes are registered on a single `DefaultRouter` in `config/urls.py` and mounted under `/api/`. Auth endpoints (`/api/auth/login|refresh|logout/`) use SimpleJWT directly.
@@ -82,6 +93,8 @@ Every viewset sets `permission_classes = [IsAuthenticated]`; row-level scoping i
 `POST /api/marks/bulk/`, `POST /api/attendance/bulk/`, and `POST /api/conduct-ratings/bulk/` are `@action(detail=False, methods=["post"], url_path="bulk")` handlers on `MarkViewSet`, `AttendanceRecordViewSet`, and `ConductRatingViewSet`. Each accepts `{"records": [...]}` and upserts every record inside one `transaction.atomic()` block, keyed on the model's natural unique constraint (`student`+`subject`+`semester` for marks, `student`+`subject`+`date` for attendance, `student`+`category`+`semester` for conduct ratings), stamping `recorded_by`/`rated_by` from `request.user.teacher_profile` when present. `MarkViewSet.bulk` skips (never overwrites) any existing `Mark` with `is_locked=True`.
 
 Note: `backend/scripts/seed_data.py` is a stale copy of `backend/apps/students/management/commands/seed_data.py` (the actual `manage.py seed_data` command) that predates a fix to teacher `employee_id` seeding and has since diverged. Edit the management command version — the `scripts/` copy isn't wired to anything.
+
+`seed_data` (full demo dataset incl. an admin with a published password) and `seed_essentials` (reference data only — academic year/semesters, subjects, grading scale, conduct categories, **no accounts**) both call shared functions in `backend/apps/students/management/_seed_common.py`. `seed_essentials` is what runs on Render deploys; create the real admin separately via `createsuperuser` (see `DEPLOYMENT.md`).
 
 ### Frontend (`frontend/src/`)
 

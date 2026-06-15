@@ -39,6 +39,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -128,7 +129,35 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = os.environ.get(
     "CORS_ALLOWED_ORIGINS", "http://localhost:3000"
 ).split(",")
+# Comma-separated regexes, e.g. for Vercel preview deployments:
+# ^https://sacred-heart-sms-.*\.vercel\.app$
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r for r in os.environ.get("CORS_ALLOWED_ORIGIN_REGEXES", "").split(",") if r
+]
 CORS_ALLOW_CREDENTIALS = True
+
+# ── Security (production / reverse proxy) ────────────────────────
+# Render (and most PaaS) terminate TLS at the edge and proxy plain HTTP
+# with X-Forwarded-Proto — without this, request.is_secure() is always
+# False behind the proxy, breaking CSRF/secure-cookie checks.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+CSRF_TRUSTED_ORIGINS = [
+    o for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if o
+]
+
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+
+# Render's edge already redirects HTTP -> HTTPS, so SECURE_SSL_REDIRECT is
+# left off here — enabling it in Django would also redirect Render's direct
+# (non-proxied) health-check probe and any local docker-compose traffic
+# (DEBUG=False locally too), breaking /api/health/ and all frontend API calls.
+# HSTS is just a response header (only sent when request.is_secure() is True
+# via SECURE_PROXY_SSL_HEADER above), so it's safe to enable unconditionally.
+SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
 
 # ── Celery ──────────────────────────────────────────────────────
 CELERY_BROKER_URL    = os.environ.get("REDIS_URL", "redis://redis:6379/0")
@@ -146,9 +175,31 @@ DEFAULT_FROM_EMAIL  = "Sacred Heart SMS <noreply@sacredheart.edu.lr>"
 
 # ── Static / Media ──────────────────────────────────────────────
 STATIC_URL  = "/static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT = Path(os.environ.get("STATIC_ROOT", BASE_DIR / "staticfiles"))
 MEDIA_URL   = "/media/"
 MEDIA_ROOT  = BASE_DIR / "media"
+
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
+# Media storage (Cloudflare R2 / any S3-compatible bucket). If
+# AWS_STORAGE_BUCKET_NAME is unset, uploads stay on local disk
+# (MEDIA_ROOT above) — fine for local dev, but ephemeral on Render.
+AWS_STORAGE_BUCKET_NAME = os.environ.get("AWS_STORAGE_BUCKET_NAME")
+if AWS_STORAGE_BUCKET_NAME:
+    STORAGES["default"] = {"BACKEND": "storages.backends.s3.S3Storage"}
+    AWS_ACCESS_KEY_ID     = os.environ["AWS_ACCESS_KEY_ID"]
+    AWS_SECRET_ACCESS_KEY = os.environ["AWS_SECRET_ACCESS_KEY"]
+    AWS_S3_ENDPOINT_URL   = os.environ["AWS_S3_ENDPOINT_URL"]
+    AWS_S3_REGION_NAME    = os.environ.get("AWS_S3_REGION_NAME", "auto")
+    AWS_S3_CUSTOM_DOMAIN  = os.environ.get("AWS_S3_CUSTOM_DOMAIN") or None
+    AWS_DEFAULT_ACL       = None
+    AWS_QUERYSTRING_AUTH  = False
+    AWS_S3_FILE_OVERWRITE = False
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LANGUAGE_CODE = "en-us"

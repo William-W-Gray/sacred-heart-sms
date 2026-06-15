@@ -9,5 +9,6 @@ gunicorn==23.0.0
 celery==5.4.0
 redis==5.2.1
 Pillow==11.0.0
-WeasyPrint==62.3
-python-decouple==3.8
+whitenoise==6.8.2
+django-storages==1.14.4
+boto3==1.35.0

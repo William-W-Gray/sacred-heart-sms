@@ -7,7 +7,8 @@ Safe to run multiple times — checks for existing data first.
 """
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from datetime import date
+
+from .. import _seed_common
 
 
 class Command(BaseCommand):
@@ -17,89 +18,13 @@ class Command(BaseCommand):
         self.stdout.write("🌱 Seeding Sacred Heart SMS demo data…")
 
         with transaction.atomic():
-            self._seed_academic_year()
-            self._seed_subjects()
-            self._seed_grading_scale()
-            self._seed_conduct_categories()
+            _seed_common.seed_academic_year(self.stdout)
+            _seed_common.seed_subjects(self.stdout)
+            _seed_common.seed_grading_scale(self.stdout)
+            _seed_common.seed_conduct_categories(self.stdout)
             self._seed_users_and_people()
 
         self.stdout.write(self.style.SUCCESS("✅ Seed complete."))
-
-    # ── Academic year ──────────────────────────────────────────
-    def _seed_academic_year(self):
-        from apps.students.models import AcademicYear, Semester
-        year, created = AcademicYear.objects.get_or_create(
-            name="2025/2026",
-            defaults=dict(start_date=date(2025, 9, 1), end_date=date(2026, 6, 30), is_current=True),
-        )
-        if created:
-            self.stdout.write("  ✓ Academic year created")
-        Semester.objects.get_or_create(
-            academic_year=year, number=1,
-            defaults=dict(start_date=date(2025, 9, 1), end_date=date(2026, 1, 31), is_active=False),
-        )
-        Semester.objects.get_or_create(
-            academic_year=year, number=2,
-            defaults=dict(start_date=date(2026, 2, 1), end_date=date(2026, 6, 30), is_active=True),
-        )
-
-    # ── Subjects ───────────────────────────────────────────────
-    def _seed_subjects(self):
-        from apps.students.models import Subject
-        subjects = [
-            ("Doctrine", "DOC"), ("Literature", "LIT"), ("Sociology", "SOC"),
-            ("Citizenship", "CIT"), ("Economics", "ECO"), ("Geometry", "GEO"),
-            ("Algebra", "ALG"), ("Trigonometry", "TRG"), ("Chemistry", "CHM"),
-            ("Physics", "PHY"), ("Biology", "BIO"), ("Agriculture", "AGR"),
-            ("Home Economics", "HEC"), ("Art", "ART"), ("Music", "MUS"),
-        ]
-        created = 0
-        for name, code in subjects:
-            _, c = Subject.objects.get_or_create(name=name, defaults={"code": code})
-            if c:
-                created += 1
-        if created:
-            self.stdout.write(f"  ✓ {created} subjects created")
-
-    # ── Grading scale ──────────────────────────────────────────
-    def _seed_grading_scale(self):
-        from apps.students.models import AcademicYear
-        from apps.marks.models import GradingScale
-        year = AcademicYear.objects.get(name="2025/2026")
-        scale = [
-            ("A", 95, 100, "Excellent",     4.00),
-            ("B", 85,  94, "Good",          3.00),
-            ("C", 78,  84, "Average",       2.00),
-            ("D", 70,  77, "Below Average", 1.00),
-            ("F",  0,  69, "Failing",       0.00),
-        ]
-        created = 0
-        for letter, mn, mx, desc, gpa in scale:
-            _, c = GradingScale.objects.get_or_create(
-                academic_year=year, grade_letter=letter,
-                defaults=dict(min_score=mn, max_score=mx, description=desc, gpa_points=gpa),
-            )
-            if c:
-                created += 1
-        if created:
-            self.stdout.write(f"  ✓ {created} grading scale entries created")
-
-    # ── Conduct categories ─────────────────────────────────────
-    def _seed_conduct_categories(self):
-        from apps.marks.models import ConductCategory
-        cats = [
-            "Punctuality", "Classroom Conduct", "Homework", "General Neatness",
-            "Cooperation With Others", "Respect For Elders", "Respect For School Property",
-            "Participation In School Activities", "Leadership Ability", "Emotional Stability",
-            "Honesty", "Self Control", "Christian Formation", "Sportsmanship",
-        ]
-        created = 0
-        for i, name in enumerate(cats):
-            _, c = ConductCategory.objects.get_or_create(name=name, defaults={"sort_order": i})
-            if c:
-                created += 1
-        if created:
-            self.stdout.write(f"  ✓ {created} conduct categories created")
 
     # ── Users, teachers, classes, students ────────────────────
     def _seed_users_and_people(self):
