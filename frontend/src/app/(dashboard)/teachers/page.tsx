@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
-import { useTeachers, useDeleteTeacher, useSubjects, useClasses } from "@/hooks/useApi";
+import { useTeachers, useDeleteTeacher, useSubjects } from "@/hooks/useApi";
 import { TeacherModal } from "@/components/forms/TeacherModal";
 import { useToast } from "@/components/ui/toaster";
 import type { Teacher } from "@/types";

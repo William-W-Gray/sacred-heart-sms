@@ -60,7 +60,7 @@ function ReportCardView({ data, teacherComment, principalComment }: {
       <div style={{ background: "#0D1A33", color: "#fff", textAlign: "center", padding: "18px 20px", borderBottom: "3px solid #C8A84B" }}>
         <div style={{ fontSize: 10, letterSpacing: 2, opacity: 0.6, marginBottom: 4, textTransform: "uppercase" }}>Republic of Liberia</div>
         <div style={{ fontFamily: "Cormorant Garamond, Georgia, serif", fontSize: 22, fontWeight: 600 }}>Sacred Heart Catholic High School</div>
-        <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2, textTransform: "uppercase", letterSpacing: 1 }}>"Ora et Labora" — Faith, Excellence &amp; Service · Monrovia, Liberia</div>
+        <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2, textTransform: "uppercase", letterSpacing: 1 }}>&ldquo;Ora et Labora&rdquo; — Faith, Excellence &amp; Service · Monrovia, Liberia</div>
         <div style={{ fontSize: 13, fontWeight: 500, color: "#E8C96A", marginTop: 8 }}>OFFICIAL STUDENT REPORT CARD — ACADEMIC YEAR {data.academic_year}</div>
       </div>
 

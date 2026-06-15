@@ -118,7 +118,6 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-2">
               {scales.map((scale) => {
-                const draft = scaleDrafts[scale.id] ?? {};
                 const gc = GRADE_COLORS[scale.grade_letter] ?? GRADE_COLORS.F;
                 return (
                   <div key={scale.id} className={`flex items-center gap-3 p-3 rounded-lg border ${gc.bg} ${gc.border}`}>

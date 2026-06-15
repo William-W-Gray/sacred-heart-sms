@@ -4,7 +4,7 @@ import {
   academicYearsApi, semestersApi, attendanceApi, marksApi, conductApi,
   promotionsApi, financeApi, notificationsApi,
 } from "@/lib/api/services";
-import type { Student, Mark, AttendanceRecord, ConductRating, Invoice, Payment } from "@/types";
+import type { Student } from "@/types";
 
 // ── Query key factory ────────────────────────────────────────────
 export const QK = {

@@ -20,6 +20,7 @@ node_modules/
 out/
 frontend/build/
 npm-debug.log*
+*.tsbuildinfo
 
 # ── Claude Code local settings ───────────────────────────────────
 .claude/settings.local.json

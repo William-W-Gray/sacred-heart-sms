@@ -1,7 +1,6 @@
 "use client";
 import { GraduationCap, Users, TrendingUp, AlertCircle, Plus, BarChart2, FileText, CreditCard } from "lucide-react";
 import { useStudents, useTeachers, useInvoices, useAcademicYears } from "@/hooks/useApi";
-import { useAuthStore } from "@/store/auth.store";
 import Link from "next/link";
 
 function StatCard({
@@ -28,7 +27,6 @@ function StatCard({
 }
 
 export default function DashboardPage() {
-  const { user } = useAuthStore();
   const { data: students }  = useStudents({ page_size: 1000 });
   const { data: teachers }  = useTeachers({ page_size: 1000 });
   const { data: invoices }  = useInvoices({ page_size: 1000 });
@@ -73,7 +71,7 @@ export default function DashboardPage() {
         <div className="rounded-card p-8 bg-gradient-to-br from-navy-deep via-navy to-[#243A6A] relative overflow-hidden shadow-lg">
           <div className="absolute top-[-60px] right-[-60px] w-48 h-48 rounded-full bg-radial-gradient opacity-20" />
           <h2 className="text-white text-2xl font-serif font-semibold">Sacred Heart Catholic High School</h2>
-          <p className="text-[rgba(255,255,255,0.6)] text-sm mt-1">"Ora et Labora" · Faith, Excellence &amp; Service · Monrovia, Liberia</p>
+          <p className="text-[rgba(255,255,255,0.6)] text-sm mt-1">&ldquo;Ora et Labora&rdquo; · Faith, Excellence &amp; Service · Monrovia, Liberia</p>
           <div className="flex gap-3 mt-5 flex-wrap">
             {[
               { label: currentYear?.name ?? "2025/2026", dot: true },

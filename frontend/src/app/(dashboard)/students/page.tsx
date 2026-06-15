@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Plus, Search, Filter, Eye, Pencil, Trash2, FileText } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, FileText } from "lucide-react";
 import { useStudents, useDeleteStudent, useClasses } from "@/hooks/useApi";
 import { StudentModal } from "@/components/forms/StudentModal";
 import { StatusBadge } from "@/components/shared/StatusBadge";

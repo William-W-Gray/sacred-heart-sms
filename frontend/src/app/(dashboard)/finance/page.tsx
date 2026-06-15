@@ -4,7 +4,7 @@ import { Plus, Receipt, Trash2, CreditCard } from "lucide-react";
 import { useInvoices, useCreateInvoice, useCreatePayment, useDeleteInvoice, useStudents } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import type { Invoice } from "@/types";
+import type { Invoice, PaymentMethod } from "@/types";
 
 function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [form, setForm] = useState({ student: "", type: "Tuition Fee", amount: "", dueDate: new Date().toISOString().split("T")[0], notes: "" });
@@ -67,7 +67,7 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
 }
 
 function PaymentModal({ invoice, onClose }: { invoice: Invoice; onClose: () => void }) {
-  const [form, setForm] = useState({ amount: String(invoice.balance), method: "cash" as const, ref: "", date: new Date().toISOString().split("T")[0], notes: "" });
+  const [form, setForm] = useState<{ amount: string; method: PaymentMethod; ref: string; date: string; notes: string }>({ amount: String(invoice.balance), method: "cash", ref: "", date: new Date().toISOString().split("T")[0], notes: "" });
   const createPayment = useCreatePayment();
   const { toast } = useToast();
 
@@ -95,7 +95,7 @@ function PaymentModal({ invoice, onClose }: { invoice: Invoice; onClose: () => v
           <div className="grid grid-cols-2 gap-4">
             <div><label className="form-label">Amount (L$) *</label><input type="number" className="form-input" value={form.amount} onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))} /></div>
             <div><label className="form-label">Method *</label>
-              <select className="form-input" value={form.method} onChange={(e) => setForm(f => ({ ...f, method: e.target.value as any }))}>
+              <select className="form-input" value={form.method} onChange={(e) => setForm(f => ({ ...f, method: e.target.value as PaymentMethod }))}>
                 {[
                   { value: "cash", label: "Cash" },
                   { value: "mobile_money", label: "Mobile Money" },

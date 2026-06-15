@@ -3,7 +3,6 @@ import { useState } from "react";
 import { Save } from "lucide-react";
 import { useStudents, usePromotions, useUpsertPromotion, useClasses } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
-import { StatusBadge } from "@/components/shared/StatusBadge";
 import type { PromotionDecisionType } from "@/types";
 
 const DECISION_OPTIONS: { value: PromotionDecisionType; label: string }[] = [
