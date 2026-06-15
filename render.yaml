@@ -52,6 +52,10 @@ services:
         value: auto
       - key: AWS_S3_CUSTOM_DOMAIN
         sync: false
+      - key: DJANGO_ADMIN_EMAIL
+        sync: false
+      - key: DJANGO_ADMIN_PASSWORD
+        sync: false
 
   # ── Celery worker (notifications) ───────────────────────────────
   - type: worker
