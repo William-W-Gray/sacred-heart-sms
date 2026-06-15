@@ -4,21 +4,30 @@ import { useStudents, useTeachers, useInvoices, useAcademicYears } from "@/hooks
 import Link from "next/link";
 
 function StatCard({
-  label, value, change, changeType, icon: Icon, accent,
+  label, value, change, changeType, icon: Icon, accent, isLoading,
 }: {
   label: string; value: string; change?: string;
-  changeType?: "up" | "down" | "neutral"; icon: React.ElementType; accent: string;
+  changeType?: "up" | "down" | "neutral"; icon: React.ElementType; accent: string; isLoading?: boolean;
 }) {
   return (
     <div className={`card relative overflow-hidden pt-1`}>
       <div className={`absolute top-0 left-0 right-0 h-0.5 ${accent}`} />
       <div className="p-5">
-        <p className="text-[11px] font-medium text-[#5A6A8A] uppercase tracking-wider mb-2">{label}</p>
-        <p className="text-3xl font-semibold text-navy font-mono">{value}</p>
-        {change && (
-          <p className={`text-xs mt-2 ${changeType === "up" ? "text-[var(--ok)]" : changeType === "down" ? "text-[var(--err)]" : "text-[#5A6A8A]"}`}>
-            {change}
-          </p>
+        <p className="text-xs font-medium text-[#5A6A8A] uppercase tracking-wider mb-2">{label}</p>
+        {isLoading ? (
+          <>
+            <div className="h-8 w-20 rounded bg-[var(--surface2)] animate-pulse" />
+            <div className="h-3 w-28 rounded bg-[var(--surface2)] animate-pulse mt-2.5" />
+          </>
+        ) : (
+          <>
+            <p className="text-3xl font-semibold text-navy font-mono">{value}</p>
+            {change && (
+              <p className={`text-xs mt-2 ${changeType === "up" ? "text-[var(--ok)]" : changeType === "down" ? "text-[var(--err)]" : "text-[#5A6A8A]"}`}>
+                {change}
+              </p>
+            )}
+          </>
         )}
         <Icon size={32} className="absolute right-5 top-1/2 -translate-y-1/2 text-navy opacity-[0.06]" />
       </div>
@@ -27,10 +36,12 @@ function StatCard({
 }
 
 export default function DashboardPage() {
-  const { data: students }  = useStudents({ page_size: 1000 });
-  const { data: teachers }  = useTeachers({ page_size: 1000 });
-  const { data: invoices }  = useInvoices({ page_size: 1000 });
+  const { data: students, isLoading: studentsLoading } = useStudents();
+  const { data: teachers, isLoading: teachersLoading } = useTeachers();
+  const { data: invoices, isLoading: invoicesLoading } = useInvoices({ page_size: 1000 });
   const { data: years }     = useAcademicYears();
+
+  const isLoading = studentsLoading || teachersLoading || invoicesLoading;
 
   const totalStudents = students?.count ?? 0;
   const totalTeachers = teachers?.count ?? 0;
@@ -48,14 +59,14 @@ export default function DashboardPage() {
     <>
       {/* Page header */}
       <div className="page-header">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-navy font-serif">Dashboard</h1>
             <p className="text-sm text-[#5A6A8A] mt-0.5">
               Good morning — here&apos;s your school at a glance.
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
             <Link href="/students" className="btn-outline flex items-center gap-2">
               <GraduationCap size={15} /> All Students
             </Link>
@@ -68,8 +79,8 @@ export default function DashboardPage() {
 
       <div className="page-content space-y-6">
         {/* Hero */}
-        <div className="rounded-card p-8 bg-gradient-to-br from-navy-deep via-navy to-[#243A6A] relative overflow-hidden shadow-lg">
-          <div className="absolute top-[-60px] right-[-60px] w-48 h-48 rounded-full bg-radial-gradient opacity-20" />
+        <div className="rounded-card p-5 sm:p-8 bg-gradient-to-br from-navy-deep via-navy to-[#243A6A] relative overflow-hidden shadow-lg">
+          <div className="absolute top-[-60px] right-[-60px] w-48 h-48 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.5)_0%,transparent_70%)] opacity-20" />
           <h2 className="text-white text-2xl font-serif font-semibold">Sacred Heart Catholic High School</h2>
           <p className="text-[rgba(255,255,255,0.6)] text-sm mt-1">&ldquo;Ora et Labora&rdquo; · Faith, Excellence &amp; Service · Monrovia, Liberia</p>
           <div className="flex gap-3 mt-5 flex-wrap">
@@ -88,18 +99,18 @@ export default function DashboardPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-4">
-          <StatCard label="Total Students" value={String(totalStudents)} change="Active enrolments" changeType="neutral" icon={GraduationCap} accent="bg-gradient-to-r from-[#C8A84B] to-[#E8C96A]" />
-          <StatCard label="Teaching Staff"  value={String(totalTeachers)} change="Across all departments" changeType="neutral" icon={Users} accent="bg-gradient-to-r from-navy to-navy-light" />
-          <StatCard label="Fee Collection"  value={`${collRate}%`} change={`L$${totalPaid.toLocaleString()} collected`} changeType="up" icon={TrendingUp} accent="bg-gradient-to-r from-[#1B6B3A] to-[#2A9D5C]" />
-          <StatCard label="Outstanding Fees" value={`L$${outstanding.toLocaleString()}`} change={`${overdueCount} overdue invoices`} changeType={overdueCount > 0 ? "down" : "neutral"} icon={AlertCircle} accent="bg-gradient-to-r from-crimson to-crimson-light" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard label="Total Students" value={String(totalStudents)} change="Active enrolments" changeType="neutral" icon={GraduationCap} accent="bg-gradient-to-r from-[#C8A84B] to-[#E8C96A]" isLoading={isLoading} />
+          <StatCard label="Teaching Staff"  value={String(totalTeachers)} change="Across all departments" changeType="neutral" icon={Users} accent="bg-gradient-to-r from-navy to-navy-light" isLoading={isLoading} />
+          <StatCard label="Fee Collection"  value={`${collRate}%`} change={`L$${totalPaid.toLocaleString()} collected`} changeType="up" icon={TrendingUp} accent="bg-gradient-to-r from-[#1B6B3A] to-[#2A9D5C]" isLoading={isLoading} />
+          <StatCard label="Outstanding Fees" value={`L$${outstanding.toLocaleString()}`} change={`${overdueCount} overdue invoices`} changeType={overdueCount > 0 ? "down" : "neutral"} icon={AlertCircle} accent="bg-gradient-to-r from-crimson to-crimson-light" isLoading={isLoading} />
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-3 gap-4">
-          <div className="card p-5 col-span-2">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="card p-5 lg:col-span-2">
             <h3 className="text-sm font-semibold text-navy mb-4">Quick Actions</h3>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[
                 { href: "/students",     icon: GraduationCap, label: "Enrol New Student",   desc: "Add a student to the registry" },
                 { href: "/marks",        icon: BarChart2,      label: "Enter Marks",          desc: "Record test & exam scores" },

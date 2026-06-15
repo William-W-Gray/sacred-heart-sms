@@ -27,6 +27,7 @@
     --surface2:     #ECEAE4;
     --border:       rgba(26,42,74,0.12);
     --border-strong:rgba(26,42,74,0.25);
+    --muted:        #5A6A8A;
   }
 
   html { font-size: 16px; }
@@ -56,10 +57,10 @@
     @apply bg-white border border-[var(--border)] rounded-card shadow-card;
   }
   .page-header {
-    @apply bg-white border-b border-[var(--border)] px-8 py-5;
+    @apply bg-white border-b border-[var(--border)] px-4 sm:px-6 lg:px-8 py-4 sm:py-5;
   }
   .page-content {
-    @apply px-8 py-7;
+    @apply px-4 sm:px-6 lg:px-8 py-5 sm:py-7;
   }
   .btn-gold {
     @apply bg-[var(--gold)] text-navy-deep font-medium rounded-md px-4 py-2
