@@ -36,12 +36,20 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-navy-deep via-navy to-[#243A6A]">
-      <div className="w-full max-w-sm bg-white rounded-card shadow-lg p-9">
+    <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-navy-deep via-navy to-[#243A6A] overflow-hidden">
+      {/* Dot pattern overlay */}
+      <div
+        className="absolute inset-0 opacity-[0.03]"
+        style={{ backgroundImage: "radial-gradient(circle, #C8A84B 1px, transparent 1px)", backgroundSize: "24px 24px" }}
+      />
+      {/* Ambient glow */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full bg-[radial-gradient(circle,rgba(200,168,75,0.06)_0%,transparent_70%)] pointer-events-none" />
+
+      <div className="relative w-full max-w-sm bg-white rounded-[20px] shadow-[0_32px_80px_rgba(13,26,51,0.4)] p-9">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#C8A84B] to-[#8B6F2A] flex items-center justify-center mx-auto mb-3">
-            <span className="text-navy-deep font-bold text-xl font-serif">SH</span>
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#C8A84B] to-[#8B6F2A] flex items-center justify-center mx-auto mb-4 shadow-[0_4px_16px_rgba(200,168,75,0.4)]">
+            <span className="text-navy-deep font-bold text-2xl font-serif">SH</span>
           </div>
           <h1 className="text-navy text-lg font-semibold font-serif">
             Sacred Heart Catholic High School
@@ -51,7 +59,7 @@ export default function LoginPage() {
 
         {/* Error */}
         {error && (
-          <div className="mb-4 px-4 py-3 bg-[var(--err-bg)] border border-[var(--err-border)] rounded-md text-sm text-[var(--err)]">
+          <div className="mb-4 px-4 py-3 bg-[var(--err-bg)] border border-[var(--err-border)] rounded-lg text-sm text-[var(--err)]">
             {error}
           </div>
         )}
@@ -88,7 +96,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full btn-gold py-3 justify-center flex items-center gap-2 mt-2 disabled:opacity-60"
+            className="w-full btn-gold py-3.5 justify-center flex items-center gap-2 mt-2 disabled:opacity-60"
           >
             {isLoading ? (
               <><span className="w-4 h-4 border-2 border-navy-deep/30 border-t-navy-deep rounded-full animate-spin" />Signing in…</>

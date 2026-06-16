@@ -83,7 +83,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* ── SIDEBAR ──────────────────────────────────────────────── */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-60 flex-shrink-0 bg-white border-r border-[var(--border)] flex flex-col overflow-y-auto transition-transform duration-200 ease-in-out",
+          "fixed inset-y-0 left-0 z-40 w-60 flex-shrink-0 bg-[#FAFAF8] border-r border-[var(--border)] flex flex-col overflow-y-auto transition-transform duration-200 ease-in-out",
           "lg:static lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
@@ -91,12 +91,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Brand */}
         <div className="px-5 py-5 border-b border-[var(--border)] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#C8A84B] to-[#8B6F2A] flex items-center justify-center flex-shrink-0">
-              <span className="text-navy-deep font-bold text-sm font-serif">SH</span>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#C8A84B] to-[#8B6F2A] flex items-center justify-center shadow-[0_2px_8px_rgba(200,168,75,0.4)] flex-shrink-0">
+              <span className="text-navy-deep font-bold text-base font-serif">SH</span>
             </div>
             <div>
-              <p className="text-xs font-semibold text-navy leading-tight">Sacred Heart</p>
-              <p className="text-[11px] text-[var(--muted)] leading-tight">Catholic High School</p>
+              <p className="text-xs font-bold text-navy tracking-tight leading-tight">Sacred Heart</p>
+              <p className="text-[10px] text-[var(--muted)] leading-tight font-medium">Catholic High School · SMS</p>
             </div>
           </div>
           <button
@@ -123,13 +123,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       key={item.href}
                       href={item.href}
                       className={cn(
-                        "flex items-center gap-2.5 px-2.5 py-3 rounded-lg text-sm transition-all duration-150",
+                        "flex items-center gap-2.5 py-2.5 rounded-lg text-sm transition-all duration-150",
                         active
-                          ? "bg-navy-pale text-navy font-medium border-l-2 border-[var(--gold)] pl-2"
-                          : "text-[#5A6A8A] hover:bg-[var(--surface)] hover:text-navy",
+                          ? "bg-gradient-to-r from-navy to-navy-light text-white font-medium shadow-sm border-l-2 border-[var(--gold)] pl-[9px] pr-2.5"
+                          : "text-[#5A6A8A] hover:bg-white hover:text-navy hover:shadow-[var(--shadow-xs)] px-2.5",
                       )}
                     >
-                      <item.icon size={15} className={active ? "text-navy" : "text-[var(--muted)]"} />
+                      <item.icon size={15} className={active ? "text-[var(--gold)]" : "text-[var(--muted)]"} />
                       {item.label}
                     </Link>
                   );
@@ -140,16 +140,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-[var(--border)]">
-          <div className="bg-navy-pale rounded-lg p-3 text-xs">
-            <p className="font-semibold text-navy">2025 / 2026</p>
-            <p className="text-[#5A6A8A] mt-0.5">Semester 2 · Active</p>
+        <div className="p-4 border-t border-[var(--border)] space-y-2">
+          {/* User identity */}
+          <div className="flex items-center gap-2.5 px-2 py-2">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#C8A84B] to-[#8B6F2A] flex items-center justify-center text-navy-deep font-bold text-xs flex-shrink-0">
+              {user.email.slice(0, 2).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-navy truncate">{user.email}</p>
+              <p className="text-[10px] text-[var(--muted)] capitalize">{role?.replace("_", " ")}</p>
+            </div>
           </div>
+          {/* Academic year */}
+          <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[var(--gold-pale)] border border-[rgba(200,168,75,0.2)]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold)] flex-shrink-0" />
+            <span className="text-[11px] font-semibold text-[var(--gold-dim)]">2025/2026 · Semester 2</span>
+          </div>
+          {/* Sign out */}
           <button
             onClick={handleLogout}
-            className="mt-3 w-full flex items-center gap-2 px-2.5 py-3.5 text-xs text-[#5A6A8A] hover:bg-[var(--surface)] rounded-lg transition-colors"
+            className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-medium text-[var(--muted)] hover:bg-white hover:text-navy rounded-lg transition-all group"
           >
-            <LogOut size={13} />
+            <LogOut size={13} className="group-hover:text-[var(--err)] transition-colors" />
             Sign out
           </button>
         </div>
@@ -158,7 +170,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* ── MAIN ────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Topbar */}
-        <header className="h-14 bg-navy-deep border-b border-[rgba(200,168,75,0.2)] flex items-center justify-between gap-3 px-4 sm:px-6 flex-shrink-0">
+        <header className="h-14 bg-navy-deep border-b border-[rgba(200,168,75,0.15)] flex items-center justify-between gap-3 px-4 sm:px-6 flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             {/* Mobile menu toggle */}
             <button
@@ -171,10 +183,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="hidden sm:flex items-center gap-2 text-xs text-[rgba(255,255,255,0.5)] min-w-0">
               <span className="truncate">Sacred Heart SMS</span>
               <ChevronRight size={12} className="flex-shrink-0" />
-              <span className="text-white capitalize truncate">{pathname.replace("/", "")}</span>
+              <span className="text-white font-medium capitalize truncate">
+                {pathname.split("/").filter(Boolean).pop()?.replace(/-/g, " ") ?? "Dashboard"}
+              </span>
             </div>
             <span className="sm:hidden text-white text-sm font-medium capitalize truncate">
-              {pathname.replace("/", "") || "dashboard"}
+              {pathname.split("/").filter(Boolean).pop()?.replace(/-/g, " ") ?? "Dashboard"}
             </span>
           </div>
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">

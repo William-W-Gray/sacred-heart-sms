@@ -1,37 +1,49 @@
 "use client";
-import { GraduationCap, Users, TrendingUp, AlertCircle, Plus, BarChart2, FileText, CreditCard } from "lucide-react";
+import {
+  GraduationCap, Users, TrendingUp, AlertCircle, Plus,
+  BarChart2, FileText, CreditCard, CalendarDays, Star,
+} from "lucide-react";
 import { useStudents, useTeachers, useInvoices, useAcademicYears } from "@/hooks/useApi";
 import { QueryError } from "@/components/shared/QueryError";
 import Link from "next/link";
 
+const getGreeting = () => {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+};
+
 function StatCard({
-  label, value, change, changeType, icon: Icon, accent, isLoading,
+  label, value, change, changeType, icon: Icon, bubble, isLoading,
 }: {
   label: string; value: string; change?: string;
-  changeType?: "up" | "down" | "neutral"; icon: React.ElementType; accent: string; isLoading?: boolean;
+  changeType?: "up" | "down" | "neutral"; icon: React.ElementType; bubble: string; isLoading?: boolean;
 }) {
   return (
-    <div className={`card relative overflow-hidden pt-1`}>
-      <div className={`absolute top-0 left-0 right-0 h-0.5 ${accent}`} />
-      <div className="p-5">
-        <p className="text-xs font-medium text-[#5A6A8A] uppercase tracking-wider mb-2">{label}</p>
-        {isLoading ? (
-          <>
-            <div className="h-8 w-20 rounded bg-[var(--surface2)] animate-pulse" />
-            <div className="h-3 w-28 rounded bg-[var(--surface2)] animate-pulse mt-2.5" />
-          </>
-        ) : (
-          <>
-            <p className="text-3xl font-semibold text-navy font-mono">{value}</p>
-            {change && (
-              <p className={`text-xs mt-2 ${changeType === "up" ? "text-[var(--ok)]" : changeType === "down" ? "text-[var(--err)]" : "text-[#5A6A8A]"}`}>
-                {change}
-              </p>
-            )}
-          </>
-        )}
-        <Icon size={32} className="absolute right-5 top-1/2 -translate-y-1/2 text-navy opacity-[0.06]" />
+    <div className="card-lift p-5">
+      <div className="flex items-start justify-between mb-4">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${bubble} shadow-md`}>
+          <Icon size={18} className="text-white" />
+        </div>
       </div>
+      {isLoading ? (
+        <>
+          <div className="skeleton h-8 w-24 mb-2" />
+          <div className="skeleton h-3 w-32" />
+        </>
+      ) : (
+        <>
+          <p className="text-2xl font-bold text-navy font-mono leading-none">{value}</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted)] mt-1">{label}</p>
+          {change && (
+            <p className={`text-xs mt-2 ${
+              changeType === "up" ? "text-[var(--ok)]" :
+              changeType === "down" ? "text-[var(--err)]" : "text-[var(--muted)]"
+            }`}>{change}</p>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -65,39 +77,58 @@ export default function DashboardPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-navy font-serif">Dashboard</h1>
-            <p className="text-sm text-[#5A6A8A] mt-0.5">
-              Good morning — here&apos;s your school at a glance.
+            <p className="text-sm text-[var(--muted)] mt-0.5">
+              {getGreeting()} — here&apos;s your school at a glance.
             </p>
           </div>
           <div className="flex gap-3 flex-wrap">
-            <Link href="/students" className="btn-outline flex items-center gap-2">
+            <Link href="/students" className="btn-outline">
               <GraduationCap size={15} /> All Students
             </Link>
-            <Link href="/students" className="btn-gold flex items-center gap-2">
+            <Link href="/students" className="btn-gold">
               <Plus size={15} /> Enrol Student
             </Link>
           </div>
         </div>
       </div>
 
-      <div className="page-content space-y-6">
-        {/* Hero */}
-        <div className="rounded-card p-5 sm:p-8 bg-gradient-to-br from-navy-deep via-navy to-[#243A6A] relative overflow-hidden shadow-lg">
-          <div className="absolute top-[-60px] right-[-60px] w-48 h-48 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.5)_0%,transparent_70%)] opacity-20" />
-          <h2 className="text-white text-2xl font-serif font-semibold">Sacred Heart Catholic High School</h2>
-          <p className="text-[rgba(255,255,255,0.6)] text-sm mt-1">&ldquo;Ora et Labora&rdquo; · Faith, Excellence &amp; Service · Monrovia, Liberia</p>
-          <div className="flex gap-3 mt-5 flex-wrap">
-            {[
-              { label: currentYear?.name ?? "2025/2026", dot: true },
-              { label: "Semester 2 Active" },
-              { label: `${totalStudents} Students` },
-              { label: `${totalTeachers} Teachers` },
-            ].map((chip) => (
-              <div key={chip.label} className="flex items-center gap-1.5 text-xs text-[rgba(255,255,255,0.8)] bg-[rgba(255,255,255,0.1)] border border-[rgba(255,255,255,0.15)] px-3 py-1.5 rounded-full">
-                {chip.dot && <span className="w-1.5 h-1.5 rounded-full bg-[#E8C96A]" />}
-                {chip.label}
-              </div>
-            ))}
+      <div className="page-content space-y-5">
+        {/* Hero banner */}
+        <div className="relative overflow-hidden rounded-[20px] bg-gradient-to-br from-[#0D1A33] via-[#1A2A4A] to-[#1E3560] p-8 sm:p-10 shadow-[0_20px_60px_rgba(13,26,51,0.35)]">
+          {/* Decorative radial glows */}
+          <div className="absolute top-0 right-0 w-72 h-72 rounded-full bg-[radial-gradient(circle_at_center,rgba(200,168,75,0.12)_0%,transparent_70%)] pointer-events-none" />
+          <div className="absolute bottom-[-40px] left-[-40px] w-64 h-64 rounded-full bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.04)_0%,transparent_70%)] pointer-events-none" />
+          {/* Gold cross */}
+          <div className="absolute top-6 right-8 opacity-10">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+              <rect x="20" y="0" width="8" height="48" rx="4" fill="#C8A84B"/>
+              <rect x="0" y="16" width="48" height="8" rx="4" fill="#C8A84B"/>
+            </svg>
+          </div>
+          {/* Content */}
+          <div className="relative">
+            <p className="text-[11px] font-bold tracking-[0.2em] text-[rgba(200,168,75,0.7)] uppercase mb-2">
+              Sacred Heart Catholic High School
+            </p>
+            <h2 className="text-white font-serif text-2xl sm:text-3xl font-semibold leading-tight">
+              {getGreeting()},<br/>
+              <span className="text-[#E8C96A]">Administrator</span>
+            </h2>
+            <p className="text-[rgba(255,255,255,0.5)] text-sm mt-2 font-light italic">
+              &ldquo;Ora et Labora&rdquo; · Faith, Excellence &amp; Service · Monrovia, Liberia
+            </p>
+            <div className="flex flex-wrap gap-2 mt-5">
+              {[
+                { icon: "📅", label: currentYear?.name ?? "2025/2026" },
+                { icon: "✦",  label: "Semester 2 Active" },
+                { icon: "👨‍🎓", label: `${totalStudents} Students Enrolled` },
+                { icon: "👩‍🏫", label: `${totalTeachers} Teaching Staff` },
+              ].map((chip) => (
+                <span key={chip.label} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[rgba(255,255,255,0.75)] bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] px-3 py-1.5 rounded-full backdrop-blur-sm">
+                  <span className="opacity-70">{chip.icon}</span> {chip.label}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -107,72 +138,118 @@ export default function DashboardPage() {
             <QueryError resource="dashboard data" onRetry={retryAll} />
           </div>
         ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Total Students" value={String(totalStudents)} change="Active enrolments" changeType="neutral" icon={GraduationCap} accent="bg-gradient-to-r from-[#C8A84B] to-[#E8C96A]" isLoading={isLoading} />
-          <StatCard label="Teaching Staff"  value={String(totalTeachers)} change="Across all departments" changeType="neutral" icon={Users} accent="bg-gradient-to-r from-navy to-navy-light" isLoading={isLoading} />
-          <StatCard label="Fee Collection"  value={`${collRate}%`} change={`L$${totalPaid.toLocaleString()} collected`} changeType="up" icon={TrendingUp} accent="bg-gradient-to-r from-[#1B6B3A] to-[#2A9D5C]" isLoading={isLoading} />
-          <StatCard label="Outstanding Fees" value={`L$${outstanding.toLocaleString()}`} change={`${overdueCount} overdue invoices`} changeType={overdueCount > 0 ? "down" : "neutral"} icon={AlertCircle} accent="bg-gradient-to-r from-crimson to-crimson-light" isLoading={isLoading} />
-        </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard
+              label="Total Students" value={String(totalStudents)}
+              change="Active enrolments" changeType="neutral"
+              icon={GraduationCap}
+              bubble="bg-gradient-to-br from-[#C8A84B] to-[#8B6F2A]"
+              isLoading={isLoading}
+            />
+            <StatCard
+              label="Teaching Staff" value={String(totalTeachers)}
+              change="Across all departments" changeType="neutral"
+              icon={Users}
+              bubble="bg-gradient-to-br from-[#1A2A4A] to-[#2A3F6A]"
+              isLoading={isLoading}
+            />
+            <StatCard
+              label="Fee Collection" value={`${collRate}%`}
+              change={`L$${totalPaid.toLocaleString()} collected`} changeType="up"
+              icon={TrendingUp}
+              bubble="bg-gradient-to-br from-[#1B6B3A] to-[#2A9D5C]"
+              isLoading={isLoading}
+            />
+            <StatCard
+              label="Outstanding" value={`L$${outstanding.toLocaleString()}`}
+              change={`${overdueCount} overdue ${overdueCount === 1 ? "invoice" : "invoices"}`}
+              changeType={overdueCount > 0 ? "down" : "neutral"}
+              icon={AlertCircle}
+              bubble="bg-gradient-to-br from-[#8B1A1A] to-[#C42B2B]"
+              isLoading={isLoading}
+            />
+          </div>
         )}
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="card p-5 lg:col-span-2">
-            <h3 className="text-sm font-semibold text-navy mb-4">Quick Actions</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Quick Actions + Finance */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          {/* Quick Actions */}
+          <div className="card overflow-hidden lg:col-span-2">
+            <div className="px-6 py-4 border-b border-[var(--border)] flex items-center justify-between">
+              <h3 className="font-serif text-lg font-semibold text-navy">Quick Actions</h3>
+              <span className="text-[11px] text-[var(--muted)] font-medium">Administrative shortcuts</span>
+            </div>
+            <div className="p-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
               {[
-                { href: "/students",     icon: GraduationCap, label: "Enrol New Student",   desc: "Add a student to the registry" },
-                { href: "/marks",        icon: BarChart2,      label: "Enter Marks",          desc: "Record test & exam scores" },
-                { href: "/attendance",   icon: BarChart2,      label: "Record Attendance",    desc: "Per-subject daily attendance" },
-                { href: "/report-cards", icon: FileText,       label: "Generate Report Card", desc: "Full PDF-ready report card" },
-                { href: "/finance",      icon: CreditCard,     label: "Create Invoice",       desc: "Tuition fee billing" },
-                { href: "/conduct",      icon: BarChart2,      label: "Conduct Ratings",      desc: "14-category conduct evaluation" },
+                { href: "/students",     icon: GraduationCap, label: "Enrol Student",   desc: "Add to registry",    color: "bg-[var(--gold-pale)] text-[var(--gold-dim)]" },
+                { href: "/marks",        icon: BarChart2,      label: "Enter Marks",     desc: "Record scores",      color: "bg-[var(--navy-pale)] text-navy" },
+                { href: "/attendance",   icon: CalendarDays,   label: "Attendance",      desc: "Daily per-subject",  color: "bg-[var(--ok-bg)] text-[var(--ok)]" },
+                { href: "/report-cards", icon: FileText,       label: "Report Cards",    desc: "Full PDF reports",   color: "bg-[var(--navy-pale)] text-navy" },
+                { href: "/finance",      icon: CreditCard,     label: "Create Invoice",  desc: "Fee billing",        color: "bg-[#FDF0D0] text-[var(--gold-dim)]" },
+                { href: "/conduct",      icon: Star,           label: "Conduct Ratings", desc: "14 categories",      color: "bg-[var(--err-bg)] text-[var(--err)]" },
               ].map((a) => (
-                <Link key={a.href} href={a.href} className="flex items-start gap-3 p-3 rounded-lg border border-[var(--border)] hover:bg-[var(--surface)] hover:border-[var(--border-strong)] transition-all group">
-                  <div className="w-8 h-8 rounded-md bg-navy-pale flex items-center justify-center flex-shrink-0 group-hover:bg-navy group-hover:text-white transition-colors">
-                    <a.icon size={15} className="text-navy group-hover:text-white" />
+                <Link
+                  key={a.href}
+                  href={a.href}
+                  className="flex flex-col gap-2.5 p-4 rounded-xl border border-[var(--border)] hover:border-[var(--border-strong)] hover:shadow-md transition-all duration-200 hover:-translate-y-0.5"
+                >
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${a.color} transition-colors`}>
+                    <a.icon size={16} />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-navy">{a.label}</p>
-                    <p className="text-xs text-[#5A6A8A] mt-0.5">{a.desc}</p>
+                    <p className="text-sm font-semibold text-navy leading-tight">{a.label}</p>
+                    <p className="text-[11px] text-[var(--muted)] mt-0.5">{a.desc}</p>
                   </div>
                 </Link>
               ))}
             </div>
           </div>
 
-          {/* Finance summary */}
-          <div className="card p-5 flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-navy">Finance</h3>
-              <Link href="/finance" className="text-xs text-[#5A6A8A] hover:text-navy transition-colors">View all →</Link>
+          {/* Finance Overview */}
+          <div className="card flex flex-col gap-0">
+            <div className="px-6 py-4 border-b border-[var(--border)] flex items-center justify-between">
+              <h3 className="font-serif text-lg font-semibold text-navy">Finance Overview</h3>
+              <Link href="/finance" className="text-xs font-semibold text-[var(--gold-dim)] hover:text-[var(--gold)] transition-colors">
+                View all →
+              </Link>
             </div>
-            <div className="space-y-3">
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-[#5A6A8A]">Collected</span>
-                  <span className="font-semibold text-[var(--ok)] font-mono">L${totalPaid.toLocaleString()}</span>
+            <div className="p-6 flex-1 space-y-5">
+              {/* SVG donut ring */}
+              <div className="text-center py-4">
+                <div className="relative inline-flex items-center justify-center">
+                  <svg viewBox="0 0 80 80" className="w-20 h-20 -rotate-90">
+                    <circle cx="40" cy="40" r="32" fill="none" stroke="var(--surface2)" strokeWidth="8" />
+                    <circle
+                      cx="40" cy="40" r="32"
+                      fill="none"
+                      stroke="var(--gold)"
+                      strokeWidth="8"
+                      strokeDasharray={`${collRate * 2.01} 201`}
+                      strokeLinecap="round"
+                      className="transition-all duration-700"
+                    />
+                  </svg>
+                  <span className="absolute text-lg font-bold font-mono text-navy">{collRate}%</span>
                 </div>
-                <div className="h-1.5 bg-[var(--surface2)] rounded-full overflow-hidden">
-                  <div className="h-full bg-[var(--ok)] rounded-full transition-all" style={{ width: `${collRate}%` }} />
-                </div>
+                <p className="text-xs font-semibold text-[var(--muted)] mt-2 uppercase tracking-wider">Collection Rate</p>
               </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-[#5A6A8A]">Outstanding</span>
-                <span className="font-semibold text-[var(--err)] font-mono">L${outstanding.toLocaleString()}</span>
+              {/* Row stats */}
+              <div className="space-y-3">
+                {[
+                  { label: "Total Invoiced", value: `L$${totalInvoiced.toLocaleString()}`, color: "text-navy" },
+                  { label: "Collected",      value: `L$${totalPaid.toLocaleString()}`,     color: "text-[var(--ok)]" },
+                  { label: "Outstanding",    value: `L$${outstanding.toLocaleString()}`,   color: "text-[var(--err)]" },
+                ].map((row) => (
+                  <div key={row.label} className="flex items-center justify-between py-2 border-b border-[var(--border)] last:border-0">
+                    <span className="text-xs text-[var(--muted)] font-medium">{row.label}</span>
+                    <span className={`text-sm font-bold font-mono ${row.color}`}>{row.value}</span>
+                  </div>
+                ))}
               </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-[#5A6A8A]">Collection Rate</span>
-                <span className="font-semibold text-navy">{collRate}%</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-[#5A6A8A]">Total Invoices</span>
-                <span className="font-semibold text-navy">{allInvoices.length}</span>
-              </div>
+              <Link href="/finance" className="btn-gold w-full justify-center text-xs py-2.5">
+                Manage Finance →
+              </Link>
             </div>
-            <Link href="/finance" className="btn-gold w-full text-center text-xs py-2 mt-auto">
-              Manage Finance →
-            </Link>
           </div>
         </div>
       </div>
