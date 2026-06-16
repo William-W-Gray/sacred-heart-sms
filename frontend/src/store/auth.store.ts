@@ -67,7 +67,10 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "sms-auth",
-      partialize: (s) => ({ user: s.user, role: s.role, isAuthenticated: s.isAuthenticated }),
+      // Only persist the boolean auth flag and role — never the user object
+      // (which contains email and PII). The user profile is re-fetched via
+      // fetchMe() when the layout mounts after a page refresh.
+      partialize: (s) => ({ isAuthenticated: s.isAuthenticated, role: s.role }),
     },
   ),
 );

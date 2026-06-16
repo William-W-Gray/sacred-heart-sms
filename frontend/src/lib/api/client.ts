@@ -12,8 +12,9 @@ export const getRefreshToken = () => Cookies.get("sms_refresh") ?? null;
 export const setTokens = (access: string, refresh: string) => {
   const decoded = jwtDecode<JWTPayload>(access);
   const expires = new Date(decoded.exp * 1000);
-  Cookies.set("sms_access",  access,  { expires, sameSite: "strict" });
-  Cookies.set("sms_refresh", refresh, { expires: 30, sameSite: "strict" });
+  const secure  = process.env.NODE_ENV === "production";
+  Cookies.set("sms_access",  access,  { expires, sameSite: "strict", secure });
+  Cookies.set("sms_refresh", refresh, { expires: 30, sameSite: "strict", secure });
 };
 
 export const clearTokens = () => {

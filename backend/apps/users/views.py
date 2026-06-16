@@ -143,11 +143,13 @@ def scope_to_own_student(qs, user, prefix="student", teacher_sees_classes=True):
     """Row-level RBAC for querysets that hang off a Student FK, directly or
     via a relation chain (e.g. prefix="invoice__student").
 
-    - student  -> only their own record
-    - guardian -> only their linked students' records
-    - teacher  -> records for students in their actively-assigned classes
-                  (or none() if teacher_sees_classes=False, e.g. finance)
-    - admin    -> unrestricted
+    - student         -> only their own record
+    - guardian        -> only their linked students' records
+    - teacher         -> records for students in their actively-assigned classes
+                         (or none() if teacher_sees_classes=False, e.g. finance)
+    - finance_officer -> none (no access to academic records; finance data handled
+                         separately in finance/views.py via IsAdminOrFinanceOfficer)
+    - admin           -> unrestricted
     """
     if user.role == "student":
         return qs.filter(**{f"{prefix}__user": user})
@@ -162,4 +164,6 @@ def scope_to_own_student(qs, user, prefix="student", teacher_sees_classes=True):
         class_ids = teacher.assignments.filter(is_active=True).values_list(
             "assigned_class_id", flat=True)
         return qs.filter(**{f"{prefix}__current_class_id__in": class_ids})
+    if user.role == "finance_officer":
+        return qs.none()  # finance officers have no access to academic records
     return qs  # admin sees all
