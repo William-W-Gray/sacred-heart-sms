@@ -21,6 +21,13 @@ class SMSTokenSerializer(TokenObtainPairSerializer):
 class LoginRateThrottle(AnonRateThrottle):
     scope = "login"
 
+    def allow_request(self, request, view):
+        try:
+            return super().allow_request(request, view)
+        except Exception:
+            # Redis unavailable — fail open so login still works
+            return True
+
 
 class SMSTokenView(TokenObtainPairView):
     serializer_class = SMSTokenSerializer

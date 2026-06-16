@@ -189,8 +189,10 @@ if REDIS_URL.startswith("rediss://"):
     import ssl
     CELERY_BROKER_USE_SSL = {"ssl_cert_reqs": ssl.CERT_NONE}
     CELERY_REDIS_BACKEND_USE_SSL = {"ssl_cert_reqs": ssl.CERT_NONE}
+    # Django's built-in RedisCache passes OPTIONS to redis-py's ConnectionPool.
+    # Use the correct key for the built-in backend (not django-redis's CONNECTION_POOL_KWARGS).
     CACHES["default"]["OPTIONS"] = {
-        "CONNECTION_POOL_KWARGS": {"ssl_cert_reqs": ssl.CERT_NONE}
+        "connection_pool_class_kwargs": {"ssl_cert_reqs": ssl.CERT_NONE},
     }
 
 # ── Email ───────────────────────────────────────────────────────
