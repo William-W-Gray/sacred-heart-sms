@@ -1,11 +1,13 @@
 "use client";
 import {
   GraduationCap, Users, TrendingUp, AlertCircle, Plus,
-  BarChart2, FileText, CreditCard, CalendarDays, Star,
+  BarChart2, FileText, CreditCard, CalendarDays, Star, UserCog,
 } from "lucide-react";
 import { useStudents, useTeachers, useInvoices, useAcademicYears } from "@/hooks/useApi";
+import { useAuthStore } from "@/store/auth.store";
 import { QueryError } from "@/components/shared/QueryError";
 import Link from "next/link";
+import type { UserRole } from "@/types";
 
 const getGreeting = () => {
   const h = new Date().getHours();
@@ -13,6 +15,58 @@ const getGreeting = () => {
   if (h < 17) return "Good afternoon";
   return "Good evening";
 };
+
+/** Derive a friendly display name from an email address.
+ *  "s.johnson@sacredheart.edu.lr" → "S. Johnson"
+ *  "john.doe@…"                  → "John Doe"
+ *  "admin@…"                     → "Admin"
+ */
+const getDisplayName = (email: string): string => {
+  const local = email.split("@")[0];
+  return local
+    .split(".")
+    .map((part) =>
+      part.length === 1
+        ? part.toUpperCase() + "."
+        : part.charAt(0).toUpperCase() + part.slice(1),
+    )
+    .join(" ");
+};
+
+const ROLE_LABEL: Record<UserRole, string> = {
+  admin:           "Administrator",
+  teacher:         "Teacher",
+  finance_officer: "Finance Officer",
+  student:         "Student",
+  guardian:        "Guardian",
+};
+
+const ROLE_SUBTITLE: Record<UserRole, string> = {
+  admin:           "Here's your school at a glance.",
+  teacher:         "Here are your classes and students.",
+  finance_officer: "Here's your financial overview.",
+  student:         "Here are your academic updates.",
+  guardian:        "Here are your child's updates.",
+};
+
+/** All possible quick-action tiles, each tagged with the roles that should see it. */
+const ALL_ACTIONS: {
+  href: string; icon: React.ElementType; label: string;
+  desc: string; color: string; roles: UserRole[];
+}[] = [
+  { href: "/students",     icon: GraduationCap, label: "Enrol Student",    desc: "Add to registry",    color: "bg-[var(--gold-pale)] text-[var(--gold-dim)]", roles: ["admin"] },
+  { href: "/students",     icon: GraduationCap, label: "My Students",      desc: "View class roster",  color: "bg-[var(--gold-pale)] text-[var(--gold-dim)]", roles: ["teacher"] },
+  { href: "/marks",        icon: BarChart2,      label: "Enter Marks",      desc: "Record scores",      color: "bg-[var(--navy-pale)] text-navy",               roles: ["admin", "teacher"] },
+  { href: "/attendance",   icon: CalendarDays,   label: "Attendance",       desc: "Daily per-subject",  color: "bg-[var(--ok-bg)] text-[var(--ok)]",            roles: ["admin", "teacher"] },
+  { href: "/report-cards", icon: FileText,       label: "Report Cards",     desc: "Full PDF reports",   color: "bg-[var(--navy-pale)] text-navy",               roles: ["admin", "teacher", "student", "guardian"] },
+  { href: "/finance",      icon: CreditCard,     label: "Create Invoice",   desc: "Fee billing",        color: "bg-[#FDF0D0] text-[var(--gold-dim)]",           roles: ["admin", "finance_officer"] },
+  { href: "/finance",      icon: CreditCard,     label: "View Invoices",    desc: "Track payments",     color: "bg-[#FDF0D0] text-[var(--gold-dim)]",           roles: ["finance_officer"] },
+  { href: "/conduct",      icon: Star,           label: "Conduct Ratings",  desc: "14 categories",      color: "bg-[var(--err-bg)] text-[var(--err)]",          roles: ["admin", "teacher"] },
+  { href: "/users",        icon: UserCog,        label: "User Management",  desc: "Manage accounts",    color: "bg-[var(--navy-pale)] text-navy",               roles: ["admin"] },
+  { href: "/report-cards", icon: FileText,       label: "My Report Card",   desc: "View your grades",   color: "bg-[var(--navy-pale)] text-navy",               roles: ["student"] },
+  { href: "/report-cards", icon: FileText,       label: "Child's Progress", desc: "Grades & conduct",   color: "bg-[var(--navy-pale)] text-navy",               roles: ["guardian"] },
+  { href: "/students",     icon: GraduationCap,  label: "Student Registry", desc: "Browse students",    color: "bg-[var(--gold-pale)] text-[var(--gold-dim)]", roles: ["finance_officer"] },
+];
 
 function StatCard({
   label, value, change, changeType, icon: Icon, bubble, isLoading,
@@ -49,6 +103,14 @@ function StatCard({
 }
 
 export default function DashboardPage() {
+  const { user, role } = useAuthStore();
+  const currentRole = (role ?? "admin") as UserRole;
+
+  const displayName   = user ? getDisplayName(user.email) : "";
+  const roleLabel     = ROLE_LABEL[currentRole];
+  const roleSubtitle  = ROLE_SUBTITLE[currentRole];
+  const visibleActions = ALL_ACTIONS.filter((a) => a.roles.includes(currentRole)).slice(0, 6);
+
   const { data: students, isLoading: studentsLoading, isError: studentsError, refetch: refetchStudents } = useStudents();
   const { data: teachers, isLoading: teachersLoading, isError: teachersError, refetch: refetchTeachers } = useTeachers();
   const { data: invoices, isLoading: invoicesLoading, isError: invoicesError, refetch: refetchInvoices } = useInvoices({ page_size: 1000 });
@@ -78,16 +140,40 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-2xl font-semibold text-navy font-serif">Dashboard</h1>
             <p className="text-sm text-[var(--muted)] mt-0.5">
-              {getGreeting()} — here&apos;s your school at a glance.
+              {getGreeting()}, {displayName} — {roleSubtitle}
             </p>
           </div>
           <div className="flex gap-3 flex-wrap">
-            <Link href="/students" className="btn-outline">
-              <GraduationCap size={15} /> All Students
-            </Link>
-            <Link href="/students" className="btn-gold">
-              <Plus size={15} /> Enrol Student
-            </Link>
+            {currentRole === "admin" && (
+              <>
+                <Link href="/students" className="btn-outline">
+                  <GraduationCap size={15} /> All Students
+                </Link>
+                <Link href="/students" className="btn-gold">
+                  <Plus size={15} /> Enrol Student
+                </Link>
+              </>
+            )}
+            {currentRole === "teacher" && (
+              <Link href="/marks" className="btn-gold">
+                <BarChart2 size={15} /> Enter Marks
+              </Link>
+            )}
+            {currentRole === "finance_officer" && (
+              <Link href="/finance" className="btn-gold">
+                <CreditCard size={15} /> Manage Finance
+              </Link>
+            )}
+            {currentRole === "student" && (
+              <Link href="/report-cards" className="btn-gold">
+                <FileText size={15} /> My Report Card
+              </Link>
+            )}
+            {currentRole === "guardian" && (
+              <Link href="/report-cards" className="btn-gold">
+                <FileText size={15} /> View Progress
+              </Link>
+            )}
           </div>
         </div>
       </div>
@@ -112,8 +198,11 @@ export default function DashboardPage() {
             </p>
             <h2 className="text-white font-serif text-2xl sm:text-3xl font-semibold leading-tight">
               {getGreeting()},<br/>
-              <span className="text-[#E8C96A]">Administrator</span>
+              <span className="text-[#E8C96A]">{displayName}</span>
             </h2>
+            <p className="text-[rgba(200,168,75,0.6)] text-xs font-semibold uppercase tracking-widest mt-1">
+              {roleLabel}
+            </p>
             <p className="text-[rgba(255,255,255,0.5)] text-sm mt-2 font-light italic">
               &ldquo;Ora et Labora&rdquo; · Faith, Excellence &amp; Service · Monrovia, Liberia
             </p>
@@ -177,19 +266,12 @@ export default function DashboardPage() {
           <div className="card overflow-hidden lg:col-span-2">
             <div className="px-6 py-4 border-b border-[var(--border)] flex items-center justify-between">
               <h3 className="font-serif text-lg font-semibold text-navy">Quick Actions</h3>
-              <span className="text-[11px] text-[var(--muted)] font-medium">Administrative shortcuts</span>
+              <span className="text-[11px] text-[var(--muted)] font-medium capitalize">{roleLabel} shortcuts</span>
             </div>
             <div className="p-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {[
-                { href: "/students",     icon: GraduationCap, label: "Enrol Student",   desc: "Add to registry",    color: "bg-[var(--gold-pale)] text-[var(--gold-dim)]" },
-                { href: "/marks",        icon: BarChart2,      label: "Enter Marks",     desc: "Record scores",      color: "bg-[var(--navy-pale)] text-navy" },
-                { href: "/attendance",   icon: CalendarDays,   label: "Attendance",      desc: "Daily per-subject",  color: "bg-[var(--ok-bg)] text-[var(--ok)]" },
-                { href: "/report-cards", icon: FileText,       label: "Report Cards",    desc: "Full PDF reports",   color: "bg-[var(--navy-pale)] text-navy" },
-                { href: "/finance",      icon: CreditCard,     label: "Create Invoice",  desc: "Fee billing",        color: "bg-[#FDF0D0] text-[var(--gold-dim)]" },
-                { href: "/conduct",      icon: Star,           label: "Conduct Ratings", desc: "14 categories",      color: "bg-[var(--err-bg)] text-[var(--err)]" },
-              ].map((a) => (
+              {visibleActions.map((a) => (
                 <Link
-                  key={a.href}
+                  key={`${a.href}-${a.label}`}
                   href={a.href}
                   className="flex flex-col gap-2.5 p-4 rounded-xl border border-[var(--border)] hover:border-[var(--border-strong)] hover:shadow-md transition-all duration-200 hover:-translate-y-0.5"
                 >
