@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Plus, Search, Pencil, Trash2, FileText } from "lucide-react";
+import Image from "next/image";
 import { useStudents, useDeleteStudent, useClasses } from "@/hooks/useApi";
 import { StudentModal } from "@/components/forms/StudentModal";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -49,7 +50,7 @@ export default function StudentsPage() {
     <>
       {/* Header */}
       <div className="page-header">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-navy font-serif">Student Registry</h1>
             <p className="text-sm text-[#5A6A8A] mt-0.5">{totalCount} enrolled students · 2025/2026</p>
@@ -60,20 +61,20 @@ export default function StudentsPage() {
         </div>
 
         {/* Filters */}
-        <div className="flex gap-3 mt-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap mt-4">
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8A9ABB]" />
             <input
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               placeholder="Search students…"
-              className="form-input pl-9 w-56 text-sm"
+              className="form-input pl-9 w-full sm:w-56 text-sm"
             />
           </div>
           <select
             value={classFilter}
             onChange={(e) => { setClassFilter(e.target.value); setPage(1); }}
-            className="form-input w-40 text-sm"
+            className="form-input w-full sm:w-40 text-sm"
           >
             <option value="">All Classes</option>
             {classes?.results?.map((c) => (
@@ -102,7 +103,7 @@ export default function StudentsPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
+              <table className="w-full text-sm border-collapse min-w-[640px]">
                 <thead className="bg-[var(--surface)]">
                   <tr>
                     {["Student", "ID", "Class", "Gender", "Guardian", "Status", "Year Avg", "Actions"].map((h) => (
@@ -118,7 +119,7 @@ export default function StudentsPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           {student.photo ? (
-                            <img src={student.photo} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+                            <Image src={student.photo} alt="" width={36} height={36} className="rounded-full object-cover flex-shrink-0" />
                           ) : (
                             <div className="w-9 h-9 rounded-full bg-navy-pale flex items-center justify-center text-navy font-semibold text-xs flex-shrink-0">
                               {student.first_name[0]}{student.last_name[0]}
@@ -176,7 +177,7 @@ export default function StudentsPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border)]">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-4 py-3 border-t border-[var(--border)]">
               <p className="text-xs text-[#5A6A8A]">
                 Showing {(page - 1) * 20 + 1}–{Math.min(page * 20, totalCount)} of {totalCount} students
               </p>

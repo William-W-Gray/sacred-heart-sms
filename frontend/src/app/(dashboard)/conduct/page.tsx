@@ -56,7 +56,7 @@ export default function ConductPage() {
   return (
     <>
       <div className="page-header">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-navy font-serif">Conduct Evaluation</h1>
             <p className="text-sm text-[#5A6A8A] mt-0.5">14 categories · 1 (Poor) to 6 (Excellent)</p>
@@ -73,7 +73,7 @@ export default function ConductPage() {
       </div>
 
       <div className="page-content">
-        <div className="grid grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {/* Left — selector */}
           <div className="space-y-4">
             <div className="card p-5">

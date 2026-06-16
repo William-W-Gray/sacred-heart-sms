@@ -30,7 +30,7 @@ export default function TeachersPage() {
   return (
     <>
       <div className="page-header">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-navy font-serif">Teaching Staff</h1>
             <p className="text-sm text-[#5A6A8A] mt-0.5">{data?.count ?? 0} active teachers</p>
@@ -49,7 +49,7 @@ export default function TeachersPage() {
             <QueryError resource="teachers" onRetry={refetch} />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
+              <table className="w-full text-sm border-collapse min-w-[640px]">
                 <thead className="bg-[var(--surface)]">
                   <tr>
                     {["Teacher", "Email", "Phone", "Department", "Subjects", "Actions"].map((h) => (

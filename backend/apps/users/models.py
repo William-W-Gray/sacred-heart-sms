@@ -103,6 +103,25 @@ class Notification(models.Model):
             metadata=metadata or {},
         )
         if channel == cls.Channel.EMAIL:
-            from apps.notifications.tasks import dispatch_email
-            dispatch_email.delay(notif.id)
+            from django.conf import settings as django_settings
+            use_async = getattr(django_settings, "CELERY_TASK_ALWAYS_EAGER", False) is False
+            try:
+                from apps.notifications.tasks import dispatch_email
+                if use_async:
+                    dispatch_email.delay(notif.id)
+                else:
+                    dispatch_email(notif.id)
+            except Exception:
+                # Celery/Redis unavailable — send synchronously
+                try:
+                    from django.core.mail import send_mail
+                    send_mail(
+                        subject=notif.title,
+                        message=notif.body,
+                        from_email=django_settings.DEFAULT_FROM_EMAIL,
+                        recipient_list=[recipient.email],
+                        fail_silently=True,
+                    )
+                except Exception:
+                    pass  # Email unavailable — notification record still exists in DB
         return notif

@@ -93,7 +93,7 @@ export function TeacherModal({ open, teacher, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-deep/50 backdrop-blur-sm">
-      <div className="bg-white rounded-card shadow-lg w-full max-w-2xl max-h-[88vh] overflow-y-auto">
+      <div className="bg-white rounded-[20px] shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] sticky top-0 bg-white z-10">
           <h2 className="text-xl font-semibold text-navy font-serif">
             {teacher ? "Edit Teacher" : "Add Teacher"}
@@ -104,7 +104,7 @@ export function TeacherModal({ open, teacher, onClose }: Props) {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="px-6 py-5 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label className="form-label">Full Name <span className="text-crimson-light">*</span></label>
               <input {...register("full_name")} className="form-input" placeholder="e.g. Mr. Samuel Johnson" />

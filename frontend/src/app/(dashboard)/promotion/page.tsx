@@ -78,7 +78,7 @@ export default function PromotionPage() {
   return (
     <>
       <div className="page-header">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-navy font-serif">Year-End Promotion Decisions</h1>
             <p className="text-sm text-[#5A6A8A] mt-0.5">Review and confirm promotion status for all students</p>
@@ -104,7 +104,7 @@ export default function PromotionPage() {
       <div className="page-content space-y-5">
         {/* Summary stats */}
         {selClass && studs.length > 0 && (
-          <div className="grid grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             {[
               { label: "Promoted",      value: counts.promoted,      cls: "from-[#1B6B3A] to-[#2A9D5C]" },
               { label: "Conditioned",   value: counts.conditioned,   cls: "from-[#C8A84B] to-[#E8C96A]" },

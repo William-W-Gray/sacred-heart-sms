@@ -39,7 +39,7 @@ function CreateUserModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-deep/50 backdrop-blur-sm">
-      <div className="bg-white rounded-card shadow-lg w-full max-w-md p-6">
+      <div className="bg-white rounded-[20px] shadow-xl w-full max-w-md mx-4 p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-semibold text-navy font-serif mb-5">Create User Account</h2>
         <div className="space-y-4">
           <div>

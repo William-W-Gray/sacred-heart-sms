@@ -235,7 +235,7 @@ export default function ReportCardPage() {
   return (
     <>
       <div className="page-header no-print">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-navy font-serif">Report Card Generator</h1>
             <p className="text-sm text-[#5A6A8A] mt-0.5">All marks, conduct &amp; attendance pulled live from the database</p>
@@ -245,7 +245,7 @@ export default function ReportCardPage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
           <div>
             <label className="form-label">Student</label>
             <select value={selStudent} onChange={(e) => setStudent(e.target.value)} className="form-input text-sm">

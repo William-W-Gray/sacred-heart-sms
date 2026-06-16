@@ -71,7 +71,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="page-content space-y-5">
-        <div className="grid grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           {/* School info */}
           <div className="card p-6">
             <div className="flex items-center justify-between mb-5">
@@ -93,7 +93,7 @@ export default function SettingsPage() {
                 <label className="form-label">School Motto</label>
                 <input value={motto} onChange={(e) => setMotto(e.target.value)} className="form-input" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="form-label">Phone</label>
                   <input value={phone} onChange={(e) => setPhone(e.target.value)} className="form-input" />

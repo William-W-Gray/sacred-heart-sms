@@ -43,17 +43,52 @@ def compute_student_year_average(student: "Student", academic_year: "AcademicYea
 
 
 def compute_class_ranking(class_id: int, academic_year: "AcademicYear") -> list[dict]:
+    """Rank students by year average. Fetches ALL marks in ONE query — no N+1."""
+    from collections import defaultdict
     from apps.students.models import Student
-    students = Student.objects.filter(current_class_id=class_id, status="active")
-    ranked = []
-    for s in students:
-        avg = compute_student_year_average(s, academic_year)
-        ranked.append({"student": s, "avg": avg or 0.0})
-    ranked.sort(key=lambda x: x["avg"], reverse=True)
-    for i, item in enumerate(ranked):
-        item["rank"]       = i + 1
-        item["class_size"] = len(ranked)
-    return ranked
+    from apps.marks.models import Mark
+
+    students = list(Student.objects.filter(current_class_id=class_id, status="active"))
+    student_ids = [s.pk for s in students]
+
+    # Batch-fetch all marks for all students in the class in a single query
+    marks_qs = Mark.objects.filter(
+        student_id__in=student_ids,
+        semester__academic_year=academic_year,
+    ).values("student_id", "subject_id", "test_score", "exam_score", "semester__number")
+
+    # Group by (student_id, subject_id, semester_number) in Python
+    # Structure: {student_id: {subject_id: {sem_num: Mark values}}}
+    student_subject_sems: dict = defaultdict(lambda: defaultdict(dict))
+    for m in marks_qs:
+        student_subject_sems[m["student_id"]][m["subject_id"]][m["semester__number"]] = m
+
+    # Compute per-student year average using the same logic as compute_student_year_average
+    results = []
+    for student in students:
+        subject_data = student_subject_sems.get(student.pk, {})
+        subject_avgs = []
+        for sid, sems in subject_data.items():
+            sem_avgs = []
+            for sem_num, m in sems.items():
+                t, e = m["test_score"], m["exam_score"]
+                if t is not None and e is not None:
+                    sem_avgs.append(float(t) * 0.4 + float(e) * 0.6)
+                elif t is not None:
+                    sem_avgs.append(float(t))
+                elif e is not None:
+                    sem_avgs.append(float(e))
+            if sem_avgs:
+                subject_avgs.append(_safe_avg(*sem_avgs))
+        year_avg = _safe_avg(*subject_avgs) if subject_avgs else None
+        results.append({"student": student, "avg": year_avg or 0.0, "rank": None, "class_size": None})
+
+    results.sort(key=lambda x: x["avg"], reverse=True)
+    class_size = len(results)
+    for i, item in enumerate(results):
+        item["rank"] = i + 1
+        item["class_size"] = class_size
+    return results
 
 
 def build_report_card_data(student: "Student", academic_year: "AcademicYear") -> dict:

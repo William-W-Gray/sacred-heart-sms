@@ -52,13 +52,13 @@ function GuardianModal({
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-deep/50 backdrop-blur-sm">
-      <div className="bg-white rounded-card shadow-lg w-full max-w-xl max-h-[88vh] overflow-y-auto">
+      <div className="bg-white rounded-[20px] shadow-xl w-full max-w-xl mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] sticky top-0 bg-white z-10">
           <h2 className="text-xl font-semibold text-navy font-serif">{guardian ? "Edit Guardian" : "Add Guardian"}</h2>
           <button onClick={onClose} className="p-1.5 rounded hover:bg-[var(--surface)] text-[#5A6A8A] transition-colors text-lg leading-none">✕</button>
         </div>
         <div className="px-6 py-5 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label className="form-label">Full Name *</label>
               <input value={form.full_name} onChange={(e) => setForm(f => ({ ...f, full_name: e.target.value }))} className="form-input" placeholder="e.g. Mr. James Kollie" />
@@ -127,7 +127,7 @@ export default function GuardiansPage() {
   return (
     <>
       <div className="page-header">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-navy font-serif">Guardians Directory</h1>
             <p className="text-sm text-[#5A6A8A] mt-0.5">{data?.count ?? 0} guardians registered</p>
@@ -146,7 +146,7 @@ export default function GuardiansPage() {
             <QueryError resource="guardians" onRetry={refetch} />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
+              <table className="w-full text-sm border-collapse min-w-[640px]">
                 <thead className="bg-[var(--surface)]">
                   <tr>
                     {["Guardian", "Contact", "Address", "Occupation", "Students", "Actions"].map((h) => (

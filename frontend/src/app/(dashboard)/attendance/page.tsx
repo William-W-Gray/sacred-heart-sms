@@ -78,7 +78,7 @@ export default function AttendancePage() {
   return (
     <>
       <div className="page-header">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-navy font-serif">Attendance Registry</h1>
             <p className="text-sm text-[#5A6A8A] mt-0.5">Record per-subject daily attendance</p>
@@ -99,14 +99,14 @@ export default function AttendancePage() {
         </div>
 
         {/* Selectors */}
-        <div className="flex gap-3 mt-4 flex-wrap">
-          <select value={selClass} onChange={(e) => setClass(e.target.value)} className="form-input w-40 text-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap mt-4">
+          <select value={selClass} onChange={(e) => setClass(e.target.value)} className="form-input w-full sm:w-40 text-sm">
             <option value="">Select Class</option>
             {classes?.results?.map((c) => (
               <option key={c.id} value={c.id}>Grade {c.name}</option>
             ))}
           </select>
-          <select value={selSubject} onChange={(e) => setSubject(e.target.value)} className="form-input w-48 text-sm">
+          <select value={selSubject} onChange={(e) => setSubject(e.target.value)} className="form-input w-full sm:w-48 text-sm">
             <option value="">Select Subject</option>
             {subjects?.results?.map((s) => (
               <option key={s.id} value={s.id}>{s.name}</option>
@@ -116,7 +116,7 @@ export default function AttendancePage() {
             type="date"
             value={selDate}
             onChange={(e) => setDate(e.target.value)}
-            className="form-input w-40 text-sm"
+            className="form-input w-full sm:w-40 text-sm"
           />
         </div>
       </div>

@@ -26,7 +26,7 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-deep/50 backdrop-blur-sm">
-      <div className="bg-white rounded-card shadow-lg w-full max-w-lg p-6">
+      <div className="bg-white rounded-[20px] shadow-xl w-full max-w-lg mx-4 p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-semibold text-navy font-serif mb-5">Create Invoice</h2>
         <div className="space-y-4">
           <div>
@@ -36,7 +36,7 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
               {students?.results?.map((s) => <option key={s.id} value={s.id}>{s.full_name} — {s.student_id}</option>)}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label className="form-label">Fee Type</label>
               <select className="form-input" value={form.type} onChange={(e) => setForm(f => ({ ...f, type: e.target.value }))}>
@@ -91,7 +91,7 @@ function PaymentModal({ invoice, onClose }: { invoice: Invoice; onClose: () => v
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-deep/50 backdrop-blur-sm">
-      <div className="bg-white rounded-card shadow-lg w-full max-w-lg p-6">
+      <div className="bg-white rounded-[20px] shadow-xl w-full max-w-lg mx-4 p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-semibold text-navy font-serif mb-2">Record Payment</h2>
         <div className="bg-navy-pale rounded-lg p-4 mb-5 text-sm space-y-2">
           <div className="flex justify-between"><span className="text-[#5A6A8A]">Invoice</span><span className="font-mono">{invoice.invoice_number}</span></div>
@@ -100,7 +100,7 @@ function PaymentModal({ invoice, onClose }: { invoice: Invoice; onClose: () => v
           <div className="flex justify-between font-semibold"><span className="text-[#5A6A8A]">Balance Due</span><span className="font-mono text-[var(--err)]">L${invoice.balance.toLocaleString()}</span></div>
         </div>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div><label className="form-label">Amount (L$) *</label><input type="number" className="form-input" value={form.amount} onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))} /></div>
             <div><label className="form-label">Method *</label>
               <select className="form-input" value={form.method} onChange={(e) => setForm(f => ({ ...f, method: e.target.value as PaymentMethod }))}>
@@ -155,7 +155,7 @@ export default function FinancePage() {
   return (
     <>
       <div className="page-header">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-navy font-serif">Finance Management</h1>
             <p className="text-sm text-[#5A6A8A] mt-0.5">Invoices, payments &amp; receipts</p>
@@ -166,7 +166,7 @@ export default function FinancePage() {
 
       <div className="page-content space-y-5">
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             { label: "Total Collected",  value: `L$${totalPaid.toLocaleString()}`,        accent: "bg-gradient-to-r from-[#1B6B3A] to-[#2A9D5C]" },
             { label: "Outstanding",      value: `L$${outstanding.toLocaleString()}`,       accent: "bg-gradient-to-r from-crimson to-crimson-light" },
@@ -239,7 +239,7 @@ export default function FinancePage() {
           )}
 
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border)]">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-4 py-3 border-t border-[var(--border)]">
               <p className="text-xs text-[#5A6A8A]">Showing {(page - 1) * 20 + 1}–{Math.min(page * 20, totalCount)} of {totalCount}</p>
               <div className="flex gap-2">
                 <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="btn-outline px-3 py-1.5 text-xs disabled:opacity-40">← Prev</button>

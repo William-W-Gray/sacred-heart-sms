@@ -51,7 +51,7 @@ export default function ClassesPage() {
   return (
     <>
       <div className="page-header">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-navy font-serif">Classes &amp; Subjects</h1>
             <p className="text-sm text-[#5A6A8A] mt-0.5">Manage academic structure for the current year</p>
@@ -68,7 +68,7 @@ export default function ClassesPage() {
       </div>
 
       <div className="page-content">
-        <div className="grid grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           {/* Classes */}
           <div className="card overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
