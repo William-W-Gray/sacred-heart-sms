@@ -11,6 +11,7 @@ import {
 import { useAuthStore } from "@/store/auth.store";
 import { useNotifications } from "@/hooks/useApi";
 import { cn } from "@/lib/utils/cn";
+import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import type { UserRole } from "@/types";
 
 type NavItem = { href: string; icon: React.ElementType; label: string };
@@ -89,6 +90,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--surface)]">
+      <OfflineBanner />
       {/* Mobile backdrop */}
       {sidebarOpen && (
         <div

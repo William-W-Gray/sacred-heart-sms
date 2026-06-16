@@ -28,7 +28,9 @@ export const decodeToken = (token: string): JWTPayload => jwtDecode<JWTPayload>(
 export const api = axios.create({
   baseURL: BASE_URL,
   headers: { "Content-Type": "application/json" },
-  timeout: 15_000,
+  // 30 s covers Render free-tier cold starts (~50 s max, but 30 s is a
+  // reasonable UX ceiling — the skeleton + OfflineBanner handle the wait).
+  timeout: 30_000,
 });
 
 // Request interceptor — attach Bearer token
@@ -86,8 +88,14 @@ api.interceptors.response.use(
       return api(original);
     } catch (refreshError) {
       processQueue(refreshError, null);
-      clearTokens();
-      window.location.href = "/login";
+      // Only clear session on an explicit server rejection (401/403).
+      // A network error (no response) means the user is offline — keep
+      // their tokens so they aren't logged out just for losing connectivity.
+      const axiosErr = refreshError as AxiosError;
+      if (axiosErr.response) {
+        clearTokens();
+        window.location.href = "/login";
+      }
       return Promise.reject(refreshError);
     } finally {
       isRefreshing = false;
