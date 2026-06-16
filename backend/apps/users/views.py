@@ -126,6 +126,12 @@ class IsAdminUser(permissions.BasePermission):
         return bool(request.user and request.user.is_authenticated and request.user.is_admin)
 
 
+class IsAdminOrFinanceOfficer(permissions.BasePermission):
+    def has_permission(self, request, view) -> bool:
+        return bool(request.user and request.user.is_authenticated
+                    and request.user.role in ("admin", "finance_officer"))
+
+
 class IsAdminOrTeacher(permissions.BasePermission):
     def has_permission(self, request, view) -> bool:
         return bool(request.user and request.user.is_authenticated

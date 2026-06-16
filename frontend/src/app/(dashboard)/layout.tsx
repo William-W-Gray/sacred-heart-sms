@@ -6,36 +6,41 @@ import {
   LayoutDashboard, GraduationCap, Users, UserCheck,
   CalendarDays, BarChart2, Star, Trophy, FileText,
   CreditCard, School, Settings, Bell, LogOut, ChevronRight,
-  Menu, X,
+  Menu, X, UserCog,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { useNotifications } from "@/hooks/useApi";
 import { cn } from "@/lib/utils/cn";
+import type { UserRole } from "@/types";
 
-const NAV = [
-  { label: "Overview",   items: [
-    { href: "/dashboard",     icon: LayoutDashboard, label: "Dashboard" },
+type NavItem = { href: string; icon: React.ElementType; label: string };
+type NavSection = { label: string; items: NavItem[]; roles?: UserRole[] };
+
+const NAV: NavSection[] = [
+  { label: "Overview", items: [
+    { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   ]},
-  { label: "People",     items: [
-    { href: "/students",      icon: GraduationCap,   label: "Students" },
-    { href: "/teachers",      icon: UserCheck,        label: "Teachers" },
-    { href: "/guardians",     icon: Users,            label: "Guardians" },
+  { label: "People", roles: ["admin", "teacher", "finance_officer"], items: [
+    { href: "/students",  icon: GraduationCap, label: "Students" },
+    { href: "/teachers",  icon: UserCheck,     label: "Teachers" },
+    { href: "/guardians", icon: Users,          label: "Guardians" },
   ]},
-  { label: "Academic",   items: [
-    { href: "/attendance",    icon: CalendarDays,     label: "Attendance" },
-    { href: "/marks",         icon: BarChart2,        label: "Marks Entry" },
-    { href: "/conduct",       icon: Star,             label: "Conduct" },
-    { href: "/promotion",     icon: Trophy,           label: "Promotion" },
+  { label: "Academic", roles: ["admin", "teacher"], items: [
+    { href: "/attendance",  icon: CalendarDays, label: "Attendance" },
+    { href: "/marks",       icon: BarChart2,    label: "Marks Entry" },
+    { href: "/conduct",     icon: Star,         label: "Conduct" },
+    { href: "/promotion",   icon: Trophy,       label: "Promotion" },
   ]},
-  { label: "Reports",    items: [
-    { href: "/report-cards",  icon: FileText,         label: "Report Cards" },
+  { label: "Reports", items: [
+    { href: "/report-cards", icon: FileText, label: "Report Cards" },
   ]},
-  { label: "Finance",    items: [
-    { href: "/finance",       icon: CreditCard,       label: "Finance" },
+  { label: "Finance", roles: ["admin", "finance_officer"], items: [
+    { href: "/finance", icon: CreditCard, label: "Finance" },
   ]},
-  { label: "Admin",      items: [
-    { href: "/classes",       icon: School,           label: "Classes & Subjects" },
-    { href: "/settings",      icon: Settings,         label: "Settings" },
+  { label: "Admin", roles: ["admin"], items: [
+    { href: "/users",    icon: UserCog, label: "User Management" },
+    { href: "/classes",  icon: School,  label: "Classes & Subjects" },
+    { href: "/settings", icon: Settings, label: "Settings" },
   ]},
 ];
 
@@ -105,7 +110,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-5">
-          {NAV.map((section) => (
+          {NAV.filter((s) => !s.roles || (role && s.roles.includes(role as UserRole))).map((section) => (
             <div key={section.label}>
               <p className="text-[11px] font-semibold tracking-widest text-[var(--muted)] uppercase px-2 mb-1.5">
                 {section.label}

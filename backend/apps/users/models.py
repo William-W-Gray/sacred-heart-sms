@@ -22,10 +22,11 @@ class UserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin):
     class Role(models.TextChoices):
-        ADMIN    = "admin",    "Administrator"
-        TEACHER  = "teacher",  "Teacher"
-        STUDENT  = "student",  "Student"
-        GUARDIAN = "guardian", "Guardian"
+        ADMIN           = "admin",           "Administrator"
+        FINANCE_OFFICER = "finance_officer", "Finance Officer"
+        TEACHER         = "teacher",         "Teacher"
+        STUDENT         = "student",         "Student"
+        GUARDIAN        = "guardian",        "Guardian"
 
     email      = models.EmailField(unique=True)
     role       = models.CharField(max_length=20, choices=Role.choices, default=Role.STUDENT)

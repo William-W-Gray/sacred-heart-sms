@@ -9,7 +9,7 @@ import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { Invoice, PaymentMethod } from "@/types";
 
 function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [form, setForm] = useState({ student: "", type: "Tuition Fee", amount: "", dueDate: new Date().toISOString().split("T")[0], notes: "" });
+  const [form, setForm] = useState({ student: "", type: "tuition", amount: "", dueDate: new Date().toISOString().split("T")[0], notes: "" });
   const { data: students } = useStudents({ page_size: 500 });
   const createInvoice = useCreateInvoice();
   const { toast } = useToast();
@@ -40,7 +40,13 @@ function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void })
             <div>
               <label className="form-label">Fee Type</label>
               <select className="form-input" value={form.type} onChange={(e) => setForm(f => ({ ...f, type: e.target.value }))}>
-                {["Tuition Fee", "Exam Fee", "Activity Fee", "Uniform Fee", "Other"].map((t) => <option key={t}>{t}</option>)}
+                {[
+                { value: "tuition",  label: "Tuition Fee" },
+                { value: "exam",     label: "Exam Fee" },
+                { value: "activity", label: "Activity Fee" },
+                { value: "uniform",  label: "Uniform Fee" },
+                { value: "other",    label: "Other" },
+              ].map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
             <div>

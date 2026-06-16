@@ -6,8 +6,24 @@ import type {
   AttendanceRecord, AttendanceSummary,
   Invoice, Payment,
   Notification, ReportCard,
-  PaginatedResponse,
+  PaginatedResponse, UserRole,
 } from "@/types";
+
+// ── User management (admin only) ─────────────────────────────────
+export interface ManagedUser {
+  id: number;
+  email: string;
+  role: UserRole;
+  is_active: boolean;
+  date_joined: string;
+}
+export interface CreateUserPayload { email: string; role: UserRole; password: string; }
+export const usersApi = {
+  list:   (p?: Record<string, unknown>) => api.get<{ results: ManagedUser[]; count: number }>("/api/users/", { params: p }).then((r) => r.data),
+  create: (d: CreateUserPayload) => api.post<ManagedUser>("/api/users/", d).then((r) => r.data),
+  update: (id: number, d: Partial<Pick<ManagedUser, "role" | "is_active">>) => api.patch<ManagedUser>(`/api/users/${id}/`, d).then((r) => r.data),
+  delete: (id: number) => api.delete(`/api/users/${id}/`).then((r) => r.data),
+};
 
 // ── Generic helpers ──────────────────────────────────────────────
 const list   = <T>(url: string, params?: Record<string, unknown>) =>

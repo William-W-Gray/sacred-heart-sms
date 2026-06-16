@@ -2,12 +2,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   studentsApi, guardiansApi, teachersApi, classesApi, subjectsApi,
   academicYearsApi, semestersApi, attendanceApi, marksApi, conductApi,
-  promotionsApi, financeApi, notificationsApi,
+  promotionsApi, financeApi, notificationsApi, usersApi,
+  type CreateUserPayload,
 } from "@/lib/api/services";
-import type { Student } from "@/types";
+import type { Student, UserRole } from "@/types";
 
 // ── Query key factory ────────────────────────────────────────────
 export const QK = {
+  users:       (p?: object) => ["users", p] as const,
   students:    (p?: object) => ["students", p] as const,
   student:     (id: number) => ["students", id] as const,
   reportCard:  (id: number) => ["report-card", id] as const,
@@ -230,5 +232,34 @@ export const useMarkAllRead = () => {
   return useMutation({
     mutationFn: notificationsApi.markAllRead,
     onSuccess:  () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+};
+
+// ── Users (admin management) ─────────────────────────────────────
+export const useUsers = (params?: Record<string, unknown>) =>
+  useQuery({ queryKey: QK.users(params), queryFn: () => usersApi.list(params) });
+
+export const useCreateUser = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (d: CreateUserPayload) => usersApi.create(d),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+};
+
+export const useUpdateUser = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...d }: { id: number; role?: UserRole; is_active?: boolean }) =>
+      usersApi.update(id, d),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+};
+
+export const useDeleteUser = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => usersApi.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });
 };

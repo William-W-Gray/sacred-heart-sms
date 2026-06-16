@@ -121,7 +121,7 @@ class StudentViewSet(viewsets.ModelViewSet):
                 return qs.none()
             class_ids = teacher.assignments.filter(is_active=True).values_list("assigned_class_id", flat=True)
             return qs.filter(current_class_id__in=class_ids)
-        return qs  # admin sees all
+        return qs  # admin and finance_officer see all
 
     def get_permissions(self):
         if self.action in ("create", "update", "partial_update", "destroy"):

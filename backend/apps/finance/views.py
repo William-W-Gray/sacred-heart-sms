@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import Invoice, Payment, Receipt
-from apps.users.views import IsAdminUser, scope_to_own_student
+from apps.users.views import IsAdminUser, IsAdminOrFinanceOfficer, scope_to_own_student
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -55,12 +55,15 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     filterset_fields   = ["student", "status", "semester", "fee_type"]
 
     def get_queryset(self):
-        return scope_to_own_student(super().get_queryset(), self.request.user,
-                                      prefix="student", teacher_sees_classes=False)
+        user = self.request.user
+        if user.role in ("admin", "finance_officer"):
+            return super().get_queryset()
+        return scope_to_own_student(super().get_queryset(), user,
+                                    prefix="student", teacher_sees_classes=False)
 
     def get_permissions(self):
         if self.action in ("create", "update", "partial_update", "destroy"):
-            return [permissions.IsAuthenticated(), IsAdminUser()]
+            return [permissions.IsAuthenticated(), IsAdminOrFinanceOfficer()]
         return [permissions.IsAuthenticated()]
 
 
@@ -72,12 +75,15 @@ class PaymentViewSet(viewsets.ModelViewSet):
     filterset_fields   = ["invoice", "method", "is_verified"]
 
     def get_queryset(self):
-        return scope_to_own_student(super().get_queryset(), self.request.user,
-                                      prefix="invoice__student", teacher_sees_classes=False)
+        user = self.request.user
+        if user.role in ("admin", "finance_officer"):
+            return super().get_queryset()
+        return scope_to_own_student(super().get_queryset(), user,
+                                    prefix="invoice__student", teacher_sees_classes=False)
 
     def get_permissions(self):
         if self.action in ("create", "update", "partial_update", "destroy"):
-            return [permissions.IsAuthenticated(), IsAdminUser()]
+            return [permissions.IsAuthenticated(), IsAdminOrFinanceOfficer()]
         return [permissions.IsAuthenticated()]
 
     def perform_create(self, serializer):

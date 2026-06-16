@@ -4,7 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 // ── Auth ────────────────────────────────────────────────────────
-export type UserRole = "admin" | "teacher" | "student" | "guardian";
+export type UserRole = "admin" | "finance_officer" | "teacher" | "student" | "guardian";
 
 export interface AuthTokens {
   access: string;
