@@ -14,6 +14,8 @@ export interface AuthTokens {
 export interface AuthUser {
   id: number;
   email: string;
+  first_name: string;
+  last_name: string;
   role: UserRole;
   is_active: boolean;
   date_joined: string;
@@ -23,6 +25,7 @@ export interface JWTPayload {
   user_id: number;
   email: string;
   role: UserRole;
+  first_name: string;
   exp: number;
   iat: number;
 }
@@ -68,6 +71,14 @@ export interface ClassGroup {
 export type Gender = "M" | "F";
 export type StudentStatus = "active" | "suspended" | "transferred" | "graduated" | "withdrawn";
 
+export interface GuardianStudentLink {
+  student_id: number;
+  student_name: string;
+  sid: string;
+  relationship: string;
+  is_primary: boolean;
+}
+
 export interface Guardian {
   id: number;
   full_name: string;
@@ -75,6 +86,7 @@ export interface Guardian {
   email: string;
   address: string;
   occupation: string;
+  linked_students?: GuardianStudentLink[];
 }
 
 export interface StudentGuardianLink {

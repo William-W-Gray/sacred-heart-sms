@@ -23,16 +23,25 @@ const ROLE_COLORS: Record<UserRole, string> = {
 };
 
 function CreateUserModal({ onClose }: { onClose: () => void }) {
-  const [form, setForm] = useState({ email: "", role: "teacher" as UserRole, password: "" });
+  const [form, setForm] = useState({
+    first_name: "",
+    last_name: "",
+    email: "",
+    role: "teacher" as UserRole,
+    password: "",
+  });
   const createUser = useCreateUser();
   const { toast } = useToast();
 
   const handleSave = async () => {
-    if (!form.email || !form.password) { toast({ title: "Email and password are required", variant: "error" }); return; }
+    if (!form.first_name.trim() || !form.last_name.trim()) {
+      toast({ title: "First and last name are required", variant: "error" }); return;
+    }
+    if (!form.email) { toast({ title: "Email is required", variant: "error" }); return; }
     if (form.password.length < 8) { toast({ title: "Password must be at least 8 characters", variant: "error" }); return; }
     try {
       await createUser.mutateAsync(form);
-      toast({ title: `User ${form.email} created`, variant: "success" });
+      toast({ title: `${form.first_name} ${form.last_name} created successfully`, variant: "success" });
       onClose();
     } catch (err) { toast({ title: getApiErrorMessage(err, "Failed to create user"), variant: "error" }); }
   };
@@ -42,6 +51,18 @@ function CreateUserModal({ onClose }: { onClose: () => void }) {
       <div className="bg-white rounded-[20px] shadow-xl w-full max-w-md mx-4 p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-semibold text-navy font-serif mb-5">Create User Account</h2>
         <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="form-label">First Name *</label>
+              <input className="form-input" placeholder="John"
+                value={form.first_name} onChange={(e) => setForm(f => ({ ...f, first_name: e.target.value }))} />
+            </div>
+            <div>
+              <label className="form-label">Last Name *</label>
+              <input className="form-input" placeholder="Doe"
+                value={form.last_name} onChange={(e) => setForm(f => ({ ...f, last_name: e.target.value }))} />
+            </div>
+          </div>
           <div>
             <label className="form-label">Email *</label>
             <input type="email" className="form-input" placeholder="user@sacredheart.edu.lr"
@@ -125,21 +146,31 @@ export default function UsersPage() {
               <table className="w-full text-sm border-collapse">
                 <thead className="bg-[var(--surface)]">
                   <tr>
-                    {["Email", "Role", "Status", "Joined", "Actions"].map((h) => (
+                    {["Name", "Email", "Role", "Status", "Joined", "Actions"].map((h) => (
                       <th key={h} className="text-left px-4 py-3 text-[11px] font-semibold text-[var(--muted)] uppercase tracking-wider border-b border-[var(--border)]">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((u) => (
+                  {users.map((u) => {
+                    const initials = u.first_name && u.last_name
+                      ? `${u.first_name[0]}${u.last_name[0]}`.toUpperCase()
+                      : u.email.slice(0, 2).toUpperCase();
+                    const displayName = u.first_name
+                      ? `${u.first_name} ${u.last_name}`.trim()
+                      : "—";
+                    return (
                     <tr key={u.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface)] transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#C8A84B] to-[#8B6F2A] flex items-center justify-center text-navy-deep font-bold text-[10px] flex-shrink-0">
-                            {u.email.slice(0, 2).toUpperCase()}
+                            {initials}
                           </div>
-                          <span className="font-medium text-navy">{u.email}</span>
+                          <span className="font-medium text-navy">{displayName}</span>
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-sm text-[var(--muted)]">{u.email}</span>
                       </td>
                       <td className="px-4 py-3">
                         <select
@@ -178,7 +209,8 @@ export default function UsersPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
               {users.length === 0 && (

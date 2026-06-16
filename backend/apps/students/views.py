@@ -2,6 +2,7 @@ from rest_framework import serializers, viewsets, permissions, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db import transaction
 
 from .models import Student, Guardian, StudentGuardian, Class, Subject, AcademicYear, Semester
 from apps.users.views import IsAdminUser
@@ -46,9 +47,24 @@ class SubjectSerializer(serializers.ModelSerializer):
 
 # ── Guardian ────────────────────────────────────────────────────
 class GuardianSerializer(serializers.ModelSerializer):
+    linked_students = serializers.SerializerMethodField()
+
     class Meta:
         model  = Guardian
-        fields = ["id", "full_name", "phone_number", "email", "address", "occupation"]
+        fields = ["id", "full_name", "phone_number", "email", "address", "occupation", "linked_students"]
+
+    def get_linked_students(self, obj) -> list:
+        links = StudentGuardian.objects.filter(guardian=obj).select_related("student")
+        return [
+            {
+                "student_id": lnk.student.id,
+                "student_name": lnk.student.full_name,
+                "sid": lnk.student.student_id,
+                "relationship": lnk.relationship,
+                "is_primary": lnk.is_primary,
+            }
+            for lnk in links
+        ]
 
 
 # ── Student ─────────────────────────────────────────────────────
@@ -163,9 +179,33 @@ class GuardianViewSet(viewsets.ModelViewSet):
         return qs  # admin sees all
 
     def get_permissions(self):
-        if self.action in ("create", "update", "partial_update", "destroy"):
+        if self.action in ("create", "update", "partial_update", "destroy", "set_students"):
             return [permissions.IsAuthenticated(), IsAdminUser()]
         return [permissions.IsAuthenticated()]
+
+    @action(detail=True, methods=["post"], url_path="set-students")
+    def set_students(self, request, pk=None):
+        """Replace all student–guardian links for this guardian (admin only)."""
+        guardian = self.get_object()
+        links = request.data.get("links", [])
+        created_count = 0
+        with transaction.atomic():
+            StudentGuardian.objects.filter(guardian=guardian).delete()
+            for link in links:
+                student_id = link.get("student")
+                if not student_id:
+                    continue
+                try:
+                    StudentGuardian.objects.create(
+                        guardian=guardian,
+                        student_id=student_id,
+                        relationship=link.get("relationship", "other"),
+                        is_primary=bool(link.get("is_primary", False)),
+                    )
+                    created_count += 1
+                except Exception:
+                    pass  # silently skip invalid student IDs
+        return Response({"linked": created_count})
 
 
 class ClassViewSet(viewsets.ModelViewSet):

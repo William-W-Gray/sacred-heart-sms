@@ -13,8 +13,9 @@ class SMSTokenSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user: User):
         token = super().get_token(user)
-        token["email"] = user.email
-        token["role"]  = user.role
+        token["email"]      = user.email
+        token["role"]       = user.role
+        token["first_name"] = user.first_name
         return token
 
 
@@ -38,7 +39,7 @@ class SMSTokenView(TokenObtainPairView):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model  = User
-        fields = ["id", "email", "role", "is_active", "date_joined"]
+        fields = ["id", "email", "first_name", "last_name", "role", "is_active", "date_joined"]
         read_only_fields = ["date_joined"]
 
 
@@ -47,7 +48,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = User
-        fields = ["id", "email", "role", "password"]
+        fields = ["id", "email", "first_name", "last_name", "role", "password"]
 
     def create(self, validated_data: dict) -> User:
         return User.objects.create_user(**validated_data)

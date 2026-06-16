@@ -13,11 +13,19 @@ import type {
 export interface ManagedUser {
   id: number;
   email: string;
+  first_name: string;
+  last_name: string;
   role: UserRole;
   is_active: boolean;
   date_joined: string;
 }
-export interface CreateUserPayload { email: string; role: UserRole; password: string; }
+export interface CreateUserPayload {
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: UserRole;
+  password: string;
+}
 export const usersApi = {
   list:   (p?: Record<string, unknown>) => api.get<{ results: ManagedUser[]; count: number }>("/api/users/", { params: p }).then((r) => r.data),
   create: (d: CreateUserPayload) => api.post<ManagedUser>("/api/users/", d).then((r) => r.data),
@@ -103,6 +111,10 @@ export const guardiansApi = {
   create: (d: Partial<Guardian>) => create<Guardian>("/api/guardians/", d),
   update: (id: number, d: Partial<Guardian>) => update<Guardian>(`/api/guardians/${id}/`, d),
   delete: (id: number) => del(`/api/guardians/${id}/`),
+  setStudents: (
+    guardianId: number,
+    links: { student: number; relationship: string; is_primary: boolean }[],
+  ) => api.post(`/api/guardians/${guardianId}/set-students/`, { links }).then((r) => r.data),
 };
 
 // ── Teachers ─────────────────────────────────────────────────────

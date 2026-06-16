@@ -106,6 +106,39 @@ export const useCreateGuardian = () => {
   return useMutation({ mutationFn: guardiansApi.create, onSuccess: () => qc.invalidateQueries({ queryKey: ["guardians"] }) });
 };
 
+export const useUpdateGuardian = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...d }: { id: number } & Partial<import("@/types").Guardian>) => guardiansApi.update(id, d),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["guardians"] }),
+  });
+};
+
+export const useDeleteGuardian = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => guardiansApi.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["guardians"] }),
+  });
+};
+
+export const useSetGuardianStudents = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      guardianId,
+      links,
+    }: {
+      guardianId: number;
+      links: { student: number; relationship: string; is_primary: boolean }[];
+    }) => guardiansApi.setStudents(guardianId, links),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["guardians"] });
+      qc.invalidateQueries({ queryKey: ["students"] });
+    },
+  });
+};
+
 // ── Academic structure ───────────────────────────────────────────
 export const useClasses = (params?: Record<string, unknown>) =>
   useQuery({ queryKey: QK.classes(params), queryFn: () => classesApi.list(params) });

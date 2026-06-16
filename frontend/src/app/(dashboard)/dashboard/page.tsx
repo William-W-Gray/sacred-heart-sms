@@ -106,7 +106,7 @@ export default function DashboardPage() {
   const { user, role } = useAuthStore();
   const currentRole = (role ?? "admin") as UserRole;
 
-  const displayName   = user ? getDisplayName(user.email) : "";
+  const displayName   = user?.first_name || (user ? getDisplayName(user.email) : "");
   const roleLabel     = ROLE_LABEL[currentRole];
   const roleSubtitle  = ROLE_SUBTITLE[currentRole];
   const visibleActions = ALL_ACTIONS.filter((a) => a.roles.includes(currentRole)).slice(0, 6);

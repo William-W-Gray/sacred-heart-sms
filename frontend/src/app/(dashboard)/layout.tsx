@@ -162,11 +162,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {/* User identity */}
           <div className="flex items-center gap-2.5 px-2 py-2">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#C8A84B] to-[#8B6F2A] flex items-center justify-center text-navy-deep font-bold text-xs flex-shrink-0">
-              {user.email.slice(0, 2).toUpperCase()}
+              {user.first_name && user.last_name
+                ? `${user.first_name[0]}${user.last_name[0]}`.toUpperCase()
+                : user.email.slice(0, 2).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-navy truncate">{user.email}</p>
-              <p className="text-[10px] text-[var(--muted)] capitalize">{role?.replace("_", " ")}</p>
+              <p className="text-xs font-semibold text-navy truncate">
+                {user.first_name ? `${user.first_name} ${user.last_name}`.trim() : user.email}
+              </p>
+              <p className="text-[10px] text-[var(--muted)] truncate">{user.email}</p>
             </div>
           </div>
           {/* Academic year */}
@@ -228,9 +232,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </span>
             {/* Avatar */}
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#C8A84B] to-[#8B6F2A] flex items-center justify-center text-navy-deep font-bold text-xs flex-shrink-0">
-              {user.email.slice(0, 2).toUpperCase()}
+              {user.first_name && user.last_name
+                ? `${user.first_name[0]}${user.last_name[0]}`.toUpperCase()
+                : user.email.slice(0, 2).toUpperCase()}
             </div>
-            <span className="hidden md:inline text-sm text-[rgba(255,255,255,0.75)] truncate max-w-[160px]">{user.email}</span>
+            <span className="hidden md:inline text-sm text-[rgba(255,255,255,0.75)] truncate max-w-[160px]">
+              {user.first_name ? `${user.first_name} ${user.last_name}`.trim() : user.email}
+            </span>
           </div>
         </header>
 
