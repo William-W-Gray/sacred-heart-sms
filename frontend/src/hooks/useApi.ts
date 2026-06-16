@@ -33,8 +33,8 @@ export const QK = {
 };
 
 // ── Students ─────────────────────────────────────────────────────
-export const useStudents = (params?: Record<string, unknown>) =>
-  useQuery({ queryKey: QK.students(params), queryFn: () => studentsApi.list(params) });
+export const useStudents = (params?: Record<string, unknown>, opts?: { enabled?: boolean }) =>
+  useQuery({ queryKey: QK.students(params), queryFn: () => studentsApi.list(params), enabled: opts?.enabled ?? true });
 
 export const useStudent = (id: number) =>
   useQuery({ queryKey: QK.student(id), queryFn: () => studentsApi.get(id), enabled: !!id });
@@ -70,8 +70,8 @@ export const useDeleteStudent = () => {
 };
 
 // ── Teachers ─────────────────────────────────────────────────────
-export const useTeachers = (params?: Record<string, unknown>) =>
-  useQuery({ queryKey: QK.teachers(params), queryFn: () => teachersApi.list(params) });
+export const useTeachers = (params?: Record<string, unknown>, opts?: { enabled?: boolean }) =>
+  useQuery({ queryKey: QK.teachers(params), queryFn: () => teachersApi.list(params), enabled: opts?.enabled ?? true });
 
 export const useCreateTeacher = () => {
   const qc = useQueryClient();
@@ -222,8 +222,8 @@ export const useUpsertPromotion = () => {
 };
 
 // ── Finance ──────────────────────────────────────────────────────
-export const useInvoices = (params?: Record<string, unknown>) =>
-  useQuery({ queryKey: QK.invoices(params), queryFn: () => financeApi.invoices.list(params) });
+export const useInvoices = (params?: Record<string, unknown>, opts?: { enabled?: boolean }) =>
+  useQuery({ queryKey: QK.invoices(params), queryFn: () => financeApi.invoices.list(params), enabled: opts?.enabled ?? true });
 
 export const useCreateInvoice = () => {
   const qc = useQueryClient();
