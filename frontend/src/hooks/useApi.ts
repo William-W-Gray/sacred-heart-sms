@@ -256,7 +256,7 @@ export const useDeleteInvoice = () => {
 export const useNotifications = () =>
   useQuery({
     queryKey: QK.notifications(),
-    queryFn:  notificationsApi.list,
+    queryFn:  () => notificationsApi.list(),
     refetchInterval: 30_000, // poll every 30 s
   });
 

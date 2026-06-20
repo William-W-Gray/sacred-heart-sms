@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
+import { authApi } from "@/lib/api/services";
 
 const schema = z.object({
   email:    z.string().email("Enter a valid email"),
@@ -26,6 +27,14 @@ export default function LoginPage() {
   useEffect(() => {
     if (isAuthenticated) router.replace("/dashboard");
   }, [isAuthenticated, router]);
+
+  // Fire-and-forget: wake a sleeping Render instance / suspended Neon
+  // compute as soon as the login page loads, so the cold-start latency is
+  // (mostly) absorbed while the user is still typing their credentials
+  // instead of being eaten by the actual login request's timeout budget.
+  useEffect(() => {
+    authApi.warmUp().catch(() => {});
+  }, []);
 
   const onSubmit = async (data: FormData) => {
     clearError();

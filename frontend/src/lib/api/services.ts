@@ -54,6 +54,10 @@ export const authApi = {
   me:      () => one<AuthUser>("/api/users/me/"),
   changePassword: (old_password: string, new_password: string) =>
     api.post("/api/users/change-password/", { old_password, new_password }),
+  // Unauthenticated, unthrottled ping to wake a sleeping Render instance /
+  // suspended Neon compute before the user finishes typing their password,
+  // so the login POST itself doesn't eat the cold-start latency.
+  warmUp:  () => api.get("/api/health/"),
 };
 
 // ── Academic structure ───────────────────────────────────────────
