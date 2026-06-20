@@ -1,3 +1,4 @@
+from django.db import IntegrityError, transaction
 from rest_framework import serializers, viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -36,9 +37,18 @@ class InvoiceSerializer(serializers.ModelSerializer):
         return obj.student.student_id
 
     def create(self, validated_data):
-        validated_data["invoice_number"] = Invoice.generate_number()
         validated_data.setdefault("created_by", self.context["request"].user)
-        return super().create(validated_data)
+        # generate_number() reads the last invoice without locking, so two
+        # concurrent requests can compute the same number — retry on the
+        # unique-constraint violation rather than 500ing one of them.
+        for attempt in range(5):
+            validated_data["invoice_number"] = Invoice.generate_number()
+            try:
+                with transaction.atomic():
+                    return super().create(validated_data)
+            except IntegrityError:
+                if attempt == 4:
+                    raise
 
 
 class ReceiptSerializer(serializers.ModelSerializer):
@@ -96,5 +106,8 @@ class ReceiptViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return scope_to_own_student(super().get_queryset(), self.request.user,
+        user = self.request.user
+        if user.role in ("admin", "finance_officer"):
+            return super().get_queryset()
+        return scope_to_own_student(super().get_queryset(), user,
                                       prefix="payment__invoice__student", teacher_sees_classes=False)

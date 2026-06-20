@@ -71,13 +71,12 @@ def compute_class_ranking(class_id: int, academic_year: "AcademicYear") -> list[
         for sid, sems in subject_data.items():
             sem_avgs = []
             for sem_num, m in sems.items():
-                t, e = m["test_score"], m["exam_score"]
-                if t is not None and e is not None:
-                    sem_avgs.append(float(t) * 0.4 + float(e) * 0.6)
-                elif t is not None:
-                    sem_avgs.append(float(t))
-                elif e is not None:
-                    sem_avgs.append(float(e))
+                # Must match Mark.semester_average's plain mean — this used to apply a
+                # hardcoded 0.4/0.6 test/exam split, so the ranking's year average
+                # disagreed with the per-subject averages shown on the same report card.
+                avg = _safe_avg(m["test_score"], m["exam_score"])
+                if avg is not None:
+                    sem_avgs.append(avg)
             if sem_avgs:
                 subject_avgs.append(_safe_avg(*sem_avgs))
         year_avg = _safe_avg(*subject_avgs) if subject_avgs else None

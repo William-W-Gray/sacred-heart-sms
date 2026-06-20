@@ -57,6 +57,8 @@ echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
 npm run dev                       # http://localhost:3000
 ```
 
+> **Testing on a phone?** `localhost` in `NEXT_PUBLIC_API_URL` only works on the machine running `npm run dev` — on a phone it resolves to the phone itself, causing a network error on login. Set it to your computer's LAN IP instead (e.g. `http://192.168.x.x:8000`), and add that IP to the backend's `ALLOWED_HOSTS` and `CORS_ALLOWED_ORIGINS`.
+
 ---
 
 ## Project Structure

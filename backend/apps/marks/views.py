@@ -171,7 +171,8 @@ class MarkViewSet(viewsets.ModelViewSet):
                     "exam_score": rec.get("exam_score"),
                 }
                 serializer = MarkSerializer(instance, data=data, partial=True)
-                serializer.is_valid(raise_exception=True)
+                if not serializer.is_valid():
+                    continue  # invalid record (e.g. out-of-range score) — skip, don't abort the whole batch
                 if teacher:
                     serializer.save(recorded_by=teacher)
                 else:
@@ -280,7 +281,8 @@ class ConductRatingViewSet(viewsets.ModelViewSet):
                     data["notes"] = rec["notes"]
 
                 serializer = ConductRatingSerializer(instance, data=data, partial=True)
-                serializer.is_valid(raise_exception=True)
+                if not serializer.is_valid():
+                    continue  # invalid record — skip, don't abort the whole batch
                 if teacher:
                     serializer.save(rated_by=teacher)
                 else:

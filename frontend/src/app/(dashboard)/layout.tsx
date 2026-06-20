@@ -63,6 +63,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [isAuthenticated, user, fetchMe, router]);
 
+  // If fetchMe() gave up because the connection was down (it keeps the
+  // session alive rather than logging out — see auth.store.ts), retry as
+  // soon as the browser reports connectivity back instead of leaving the
+  // user stuck on the skeleton below.
+  useEffect(() => {
+    if (!isAuthenticated || user) return;
+    window.addEventListener("online", fetchMe);
+    return () => window.removeEventListener("online", fetchMe);
+  }, [isAuthenticated, user, fetchMe]);
+
   // Close the mobile drawer whenever the route changes.
   useEffect(() => {
     setSidebarOpen(false);

@@ -176,9 +176,11 @@ export interface ConductCategory {
 export interface ConductRating {
   id: number;
   student: number;
+  student_name?: string;
   category: number;
   category_name?: string;
   semester: number;
+  rated_by: number | null;
   rating: 1 | 2 | 3 | 4 | 5 | 6;
   notes: string;
   updated_at: string;
@@ -190,12 +192,15 @@ export type AttendanceStatus = "present" | "late" | "absent" | "excused";
 export interface AttendanceRecord {
   id: number;
   student: number;
+  student_name?: string;
   subject: number;
+  subject_name?: string;
   class_group: number;
   date: string;
   status: AttendanceStatus;
   recorded_by: number | null;
   notes: string;
+  created_at: string;
 }
 
 export interface AttendanceSummary {
@@ -252,6 +257,7 @@ export interface Payment {
   method: PaymentMethod;
   reference_number: string;
   payment_date: string;
+  received_by: number | null;
   is_verified: boolean;
   notes: string;
   created_at: string;

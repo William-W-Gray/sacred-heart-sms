@@ -3,7 +3,7 @@ import { persist } from "zustand/middleware";
 import { jwtDecode } from "jwt-decode";
 import { setTokens, clearTokens } from "@/lib/api/client";
 import { authApi } from "@/lib/api/services";
-import { getApiErrorMessage } from "@/lib/utils/errors";
+import { getApiErrorMessage, isNetworkError, withRetry } from "@/lib/utils/errors";
 import type { AuthUser, JWTPayload, UserRole } from "@/types";
 
 interface AuthState {
@@ -30,11 +30,14 @@ export const useAuthStore = create<AuthState>()(
       login: async (email, password) => {
         set({ isLoading: true, error: null });
         try {
-          const tokens = await authApi.login(email, password);
+          // withRetry: a flaky mobile connection can drop the login POST
+          // itself — retry transparently on network/timeout errors, but
+          // never on a real 401 (wrong credentials) or 429 (throttled).
+          const tokens = await withRetry(() => authApi.login(email, password));
           setTokens(tokens.access, tokens.refresh);
           const payload = jwtDecode<JWTPayload>(tokens.access);
           // Fetch full user profile
-          const user = await authApi.me();
+          const user = await withRetry(() => authApi.me());
           set({ user, role: payload.role, isAuthenticated: true, isLoading: false });
         } catch (err: unknown) {
           set({ error: getApiErrorMessage(err, "Invalid credentials."), isLoading: false });
@@ -55,11 +58,19 @@ export const useAuthStore = create<AuthState>()(
 
       fetchMe: async () => {
         try {
-          const user = await authApi.me();
+          const user = await withRetry(() => authApi.me());
           set({ user, role: user.role as UserRole, isAuthenticated: true });
-        } catch {
-          clearTokens();
-          set({ user: null, role: null, isAuthenticated: false });
+        } catch (err: unknown) {
+          // A network error means we're offline/flaky, not that the
+          // session is invalid — keep the tokens and stay "authenticated"
+          // so the dashboard layout can retry on reconnect instead of
+          // silently bouncing the user back to /login (the bug this
+          // guards against: a weak mobile connection logging users out
+          // on every page refresh).
+          if (!isNetworkError(err)) {
+            clearTokens();
+            set({ user: null, role: null, isAuthenticated: false });
+          }
         }
       },
 

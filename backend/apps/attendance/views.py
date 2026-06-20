@@ -128,7 +128,8 @@ class AttendanceRecordViewSet(viewsets.ModelViewSet):
                     data["notes"] = rec["notes"]
 
                 serializer = AttendanceRecordSerializer(instance, data=data, partial=True)
-                serializer.is_valid(raise_exception=True)
+                if not serializer.is_valid():
+                    continue  # invalid record — skip, don't abort the whole batch
                 if teacher:
                     serializer.save(recorded_by=teacher)
                 else:
