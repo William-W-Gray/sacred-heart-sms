@@ -18,6 +18,7 @@ const securityHeaders = [
 ];
 
 const nextConfig = {
+  skipTrailingSlashRedirect: true,
   // "standalone" output is needed for the docker-compose frontend image
   // (Dockerfile copies .next/standalone + server.js), but it conflicts with
   // Vercel's own serverless-function tracing during "Collecting build
