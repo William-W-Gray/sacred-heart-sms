@@ -190,7 +190,7 @@ export default function FinancePage() {
             <QueryError resource="invoices" onRetry={refetch} />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
+              <table className="w-full text-sm border-collapse min-w-[900px]">
                 <thead className="bg-[var(--surface)]">
                   <tr>
                     {["Invoice #", "Student", "Type", "Amount", "Paid", "Balance", "Due Date", "Status", "Actions"].map((h) => (

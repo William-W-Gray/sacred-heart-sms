@@ -105,7 +105,7 @@ export default function ClassesPage() {
               <QueryError resource="classes" onRetry={refetchClasses} />
             ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
+              <table className="w-full text-sm border-collapse min-w-[600px]">
                 <thead className="bg-[var(--surface)]">
                   <tr>
                     {["Class", "Students", "Class Teacher"].map((h) => (

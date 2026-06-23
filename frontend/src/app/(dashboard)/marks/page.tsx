@@ -163,7 +163,7 @@ export default function MarksPage() {
         ) : (
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
+              <table className="w-full text-sm border-collapse min-w-[800px]">
                 <thead className="bg-[var(--surface)]">
                   <tr>
                     <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#5A6A8A] uppercase tracking-wider border-b border-[var(--border)] w-8">#</th>

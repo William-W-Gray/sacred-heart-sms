@@ -168,7 +168,7 @@ export default function SettingsPage() {
             <QueryError resource="academic years" onRetry={refetchYears} />
           ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
+            <table className="w-full text-sm border-collapse min-w-[600px]">
               <thead className="bg-[var(--surface)]">
                 <tr>
                   {["Name", "Start Date", "End Date", "Status"].map((h) => (

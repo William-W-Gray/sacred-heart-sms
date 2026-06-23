@@ -153,7 +153,7 @@ export default function AttendancePage() {
 
             <div className="card overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm border-collapse">
+                <table className="w-full text-sm border-collapse min-w-[640px]">
                   <thead className="bg-[var(--surface)]">
                     <tr>
                       {["#", "Student", "ID", "Status", "Overall Att%"].map((h) => (

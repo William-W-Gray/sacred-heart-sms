@@ -2,6 +2,9 @@ FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
 # System deps: libpq for psycopg2, curl for the Docker healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev gcc curl \

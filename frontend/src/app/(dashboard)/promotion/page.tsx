@@ -139,7 +139,7 @@ export default function PromotionPage() {
         ) : (
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
+              <table className="w-full text-sm border-collapse min-w-[800px]">
                 <thead className="bg-[var(--surface)]">
                   <tr>
                     {["Student", "Class", "Year Avg", "Att%", "Decision", "Note"].map((h) => (

@@ -28,6 +28,15 @@ const nextConfig = {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
 
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${API_URL}/api/:path*`,
+      },
+    ];
+  },
+
   images: {
     remotePatterns: [
       { protocol: "http",  hostname: "localhost", port: "8000" },

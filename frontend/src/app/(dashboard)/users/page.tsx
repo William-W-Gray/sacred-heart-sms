@@ -143,7 +143,7 @@ export default function UsersPage() {
             <div className="flex items-center justify-center h-48 text-[var(--muted)] text-sm">Loading users…</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
+              <table className="w-full text-sm border-collapse min-w-[700px]">
                 <thead className="bg-[var(--surface)]">
                   <tr>
                     {["Name", "Email", "Role", "Status", "Joined", "Actions"].map((h) => (
