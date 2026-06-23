@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,6 +7,7 @@ import { X } from "lucide-react";
 import { useCreateTeacher, useUpdateTeacher, useSubjects, useClasses } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/lib/utils/errors";
+import { FileUploadZone } from "@/components/ui/FileUploadZone";
 import type { Teacher } from "@/types";
 
 const schema = z.object({
@@ -36,6 +37,7 @@ export function TeacherModal({ open, teacher, onClose }: Props) {
   const { data: classes }  = useClasses();
   const createMutation     = useCreateTeacher();
   const updateMutation     = useUpdateTeacher(teacher?.id ?? 0);
+  const [savedId, setSavedId] = useState<number | null>(teacher?.id ?? null);
 
   const {
     register, handleSubmit, reset, watch, setValue,
@@ -78,12 +80,13 @@ export function TeacherModal({ open, teacher, onClose }: Props) {
       };
       if (teacher) {
         await updateMutation.mutateAsync(payload);
+        setSavedId(teacher.id);
         toast({ title: `${data.full_name} updated`, variant: "success" });
       } else {
-        await createMutation.mutateAsync(payload);
+        const res = await createMutation.mutateAsync(payload);
+        setSavedId((res as { id: number }).id);
         toast({ title: `${data.full_name} added`, variant: "success" });
       }
-      onClose();
     } catch (err) {
       toast({ title: getApiErrorMessage(err, "Failed to save teacher"), variant: "error" });
     }
@@ -159,13 +162,35 @@ export function TeacherModal({ open, teacher, onClose }: Props) {
             </div>
           </div>
 
+          {/* Photo upload — shown once the record exists */}
+          {savedId && (
+            <FileUploadZone
+              endpoint={`/api/teachers/${savedId}/`}
+              fieldName="photo"
+              method="patch"
+              maxFiles={1}
+              maxSize={5 * 1024 * 1024}
+              label="Teacher Photo"
+              onUploaded={() =>
+                toast({ title: "Photo uploaded", variant: "success" })
+              }
+            />
+          )}
+
           <div className="flex justify-end gap-3 pt-3 border-t border-[var(--border)]">
-            <button type="button" onClick={onClose} className="btn-outline">Cancel</button>
-            <button type="submit" disabled={isSubmitting} className="btn-gold flex items-center gap-2 disabled:opacity-60">
-              {isSubmitting ? (
-                <><span className="w-3.5 h-3.5 border-2 border-navy-deep/30 border-t-navy-deep rounded-full animate-spin" />Saving…</>
-              ) : `✓ ${teacher ? "Update" : "Add"} Teacher`}
+            <button type="button" onClick={onClose} className="btn-outline">
+              {savedId ? "Close" : "Cancel"}
             </button>
+            {!savedId && (
+              <button type="submit" disabled={isSubmitting} className="btn-gold flex items-center gap-2 disabled:opacity-60">
+                {isSubmitting ? (
+                  <><span className="w-3.5 h-3.5 border-2 border-navy-deep/30 border-t-navy-deep rounded-full animate-spin" />Saving…</>
+                ) : `✓ ${teacher ? "Update" : "Add"} Teacher`}
+              </button>
+            )}
+            {savedId && (
+              <button type="button" onClick={onClose} className="btn-gold">✓ Done</button>
+            )}
           </div>
         </form>
       </div>

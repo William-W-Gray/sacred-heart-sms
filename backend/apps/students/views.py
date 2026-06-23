@@ -135,8 +135,11 @@ class StudentViewSet(viewsets.ModelViewSet):
             teacher = getattr(user, "teacher_profile", None)
             if not teacher:
                 return qs.none()
-            class_ids = teacher.assignments.filter(is_active=True).values_list("assigned_class_id", flat=True)
-            return qs.filter(current_class_id__in=class_ids)
+            from django.db.models import Q
+            return qs.filter(
+                Q(current_class__teacher_assignments__teacher=teacher, current_class__teacher_assignments__is_active=True) |
+                Q(current_class__class_teacher=teacher)
+            ).distinct()
         return qs  # admin and finance_officer see all
 
     def get_permissions(self):
@@ -173,9 +176,11 @@ class GuardianViewSet(viewsets.ModelViewSet):
             teacher = getattr(user, "teacher_profile", None)
             if not teacher:
                 return qs.none()
-            class_ids = teacher.assignments.filter(is_active=True).values_list(
-                "assigned_class_id", flat=True)
-            return qs.filter(students__current_class_id__in=class_ids).distinct()
+            from django.db.models import Q
+            return qs.filter(
+                Q(students__current_class__teacher_assignments__teacher=teacher, students__current_class__teacher_assignments__is_active=True) |
+                Q(students__current_class__class_teacher=teacher)
+            ).distinct()
         return qs  # admin sees all
 
     def get_permissions(self):
@@ -215,6 +220,30 @@ class ClassViewSet(viewsets.ModelViewSet):
     filter_backends    = [DjangoFilterBackend]
     filterset_fields   = ["academic_year", "grade"]
 
+    def get_queryset(self):
+        user = self.request.user
+        qs   = super().get_queryset()
+        if user.role == "student":
+            student = getattr(user, "student_profile", None)
+            if not student or not student.current_class:
+                return qs.none()
+            return qs.filter(id=student.current_class.id)
+        if user.role == "guardian":
+            guardian = getattr(user, "guardian_profile", None)
+            if not guardian:
+                return qs.none()
+            return qs.filter(students__guardians=guardian).distinct()
+        if user.role == "teacher":
+            teacher = getattr(user, "teacher_profile", None)
+            if not teacher:
+                return qs.none()
+            from django.db.models import Q
+            return qs.filter(
+                Q(teacher_assignments__teacher=teacher, teacher_assignments__is_active=True) |
+                Q(class_teacher=teacher)
+            ).distinct()
+        return qs
+
     def get_permissions(self):
         if self.action in ("create", "update", "partial_update", "destroy"):
             return [permissions.IsAuthenticated(), IsAdminUser()]
@@ -225,6 +254,30 @@ class SubjectViewSet(viewsets.ModelViewSet):
     queryset           = Subject.objects.all()
     serializer_class   = SubjectSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs   = super().get_queryset()
+        if user.role == "student":
+            student = getattr(user, "student_profile", None)
+            if not student or not student.current_class:
+                return qs.none()
+            return qs.filter(teacher_assignments__assigned_class=student.current_class, teacher_assignments__is_active=True).distinct()
+        if user.role == "guardian":
+            guardian = getattr(user, "guardian_profile", None)
+            if not guardian:
+                return qs.none()
+            return qs.filter(teacher_assignments__assigned_class__students__guardians=guardian, teacher_assignments__is_active=True).distinct()
+        if user.role == "teacher":
+            teacher = getattr(user, "teacher_profile", None)
+            if not teacher:
+                return qs.none()
+            from django.db.models import Q
+            return qs.filter(
+                Q(teacher_assignments__teacher=teacher, teacher_assignments__is_active=True) |
+                Q(teacher_assignments__assigned_class__class_teacher=teacher, teacher_assignments__is_active=True)
+            ).distinct()
+        return qs
 
     def get_permissions(self):
         if self.action in ("create", "update", "partial_update", "destroy"):

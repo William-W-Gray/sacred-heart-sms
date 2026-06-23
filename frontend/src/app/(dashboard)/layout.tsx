@@ -60,8 +60,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     } else if (!user) {
       // user object is not persisted in localStorage — re-fetch after page refresh
       fetchMe();
+    } else if (role) {
+      // Check if user has permission to access the current pathname
+      let isAuthorized = true;
+      for (const section of NAV) {
+        const hasItem = section.items.some((item) => pathname === item.href || pathname.startsWith(item.href + "/"));
+        if (hasItem) {
+          if (section.roles && !section.roles.includes(role as UserRole)) {
+            isAuthorized = false;
+          }
+          break;
+        }
+      }
+      if (!isAuthorized) {
+        router.replace("/dashboard");
+      }
     }
-  }, [isAuthenticated, user, fetchMe, router]);
+  }, [isAuthenticated, user, role, pathname, fetchMe, router]);
 
   // If fetchMe() gave up because the connection was down (it keeps the
   // session alive rather than logging out — see auth.store.ts), retry as

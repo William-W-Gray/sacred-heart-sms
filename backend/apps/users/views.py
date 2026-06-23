@@ -78,6 +78,13 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by("email")
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_queryset(self):
+        user = self.request.user
+        qs = super().get_queryset()
+        if user.role != "admin":
+            return qs.filter(id=user.id)
+        return qs
+
     def get_serializer_class(self):
         if self.action == "create":
             return UserCreateSerializer
@@ -147,6 +154,7 @@ def scope_to_own_student(qs, user, prefix="student", teacher_sees_classes=True):
     - student         -> only their own record
     - guardian        -> only their linked students' records
     - teacher         -> records for students in their actively-assigned classes
+                         or classes where they are the homeroom teacher
                          (or none() if teacher_sees_classes=False, e.g. finance)
     - finance_officer -> none (no access to academic records; finance data handled
                          separately in finance/views.py via IsAdminOrFinanceOfficer)
@@ -162,9 +170,11 @@ def scope_to_own_student(qs, user, prefix="student", teacher_sees_classes=True):
         teacher = getattr(user, "teacher_profile", None)
         if not teacher:
             return qs.none()
-        class_ids = teacher.assignments.filter(is_active=True).values_list(
-            "assigned_class_id", flat=True)
-        return qs.filter(**{f"{prefix}__current_class_id__in": class_ids})
+        from django.db.models import Q
+        return qs.filter(
+            Q(**{f"{prefix}__current_class__teacher_assignments__teacher": teacher, f"{prefix}__current_class__teacher_assignments__is_active": True}) |
+            Q(**{f"{prefix}__current_class__class_teacher": teacher})
+        ).distinct()
     if user.role == "finance_officer":
         return qs.none()  # finance officers have no access to academic records
     return qs  # admin sees all
