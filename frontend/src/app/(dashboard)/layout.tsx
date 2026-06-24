@@ -61,12 +61,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       // user object is not persisted in localStorage — re-fetch after page refresh
       fetchMe();
     } else if (role) {
-      // Check if user has permission to access the current pathname
+      // Check if user has permission to access the current pathname —
+      // both the section's roles AND the specific item's own (more
+      // specific) roles must allow it, e.g. "/teachers" sits under the
+      // "People" section (admin/teacher/finance_officer) but the item
+      // itself further restricts to admin/teacher only.
       let isAuthorized = true;
       for (const section of NAV) {
-        const hasItem = section.items.some((item) => pathname === item.href || pathname.startsWith(item.href + "/"));
-        if (hasItem) {
+        const item = section.items.find((item) => pathname === item.href || pathname.startsWith(item.href + "/"));
+        if (item) {
           if (section.roles && !section.roles.includes(role as UserRole)) {
+            isAuthorized = false;
+          }
+          if (item.roles && !item.roles.includes(role as UserRole)) {
             isAuthorized = false;
           }
           break;
