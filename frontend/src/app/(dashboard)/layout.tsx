@@ -48,13 +48,18 @@ const NAV: NavSection[] = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router   = useRouter();
   const pathname = usePathname();
-  const { user, role, isAuthenticated, logout, fetchMe } = useAuthStore();
+  const { user, role, isAuthenticated, logout, fetchMe, hasHydrated } = useAuthStore();
   const { data: notifData } = useNotifications();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const unreadCount = notifData?.results?.filter((n) => !n.is_read).length ?? 0;
 
   useEffect(() => {
+    // Wait for the persisted auth flag to rehydrate from localStorage —
+    // on the very first render after a hard reload `isAuthenticated` is
+    // still the default `false`, which would otherwise bounce an
+    // actually-logged-in user to /login before rehydration lands.
+    if (!hasHydrated) return;
     if (!isAuthenticated) {
       router.replace("/login");
     } else if (!user) {
@@ -83,7 +88,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         router.replace("/dashboard");
       }
     }
-  }, [isAuthenticated, user, role, pathname, fetchMe, router]);
+  }, [hasHydrated, isAuthenticated, user, role, pathname, fetchMe, router]);
 
   // If fetchMe() gave up because the connection was down (it keeps the
   // session alive rather than logging out — see auth.store.ts), retry as
@@ -100,20 +105,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setSidebarOpen(false);
   }, [pathname]);
 
+  const skeleton = (
+    <div className="min-h-screen bg-[var(--surface)] flex items-center justify-center">
+      <div className="space-y-3 w-64">
+        <div className="skeleton h-5 w-48 rounded-lg" />
+        <div className="skeleton h-3 w-32 rounded-lg" />
+        <div className="skeleton h-3 w-40 rounded-lg" />
+      </div>
+    </div>
+  );
+
+  // Still rehydrating — don't trust `isAuthenticated` yet (see auth.store.ts).
+  if (!hasHydrated) return skeleton;
+
   if (!isAuthenticated) return null;
 
-  // Show skeleton while user profile is re-fetched (first render after page refresh)
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-[var(--surface)] flex items-center justify-center">
-        <div className="space-y-3 w-64">
-          <div className="skeleton h-5 w-48 rounded-lg" />
-          <div className="skeleton h-3 w-32 rounded-lg" />
-          <div className="skeleton h-3 w-40 rounded-lg" />
-        </div>
-      </div>
-    );
-  }
+  // Authenticated but the profile hasn't been re-fetched yet (first render
+  // after a page refresh, since `user` itself isn't persisted).
+  if (!user) return skeleton;
 
   const handleLogout = async () => {
     await logout();

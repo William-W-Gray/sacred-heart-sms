@@ -12,10 +12,18 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  // Zustand's persist middleware reads localStorage asynchronously — on the
+  // very first render after a hard reload, `isAuthenticated` is still the
+  // default `false` for one tick before rehydration lands. Consumers that
+  // make redirect decisions (e.g. the dashboard layout) must wait for this
+  // flag before trusting `isAuthenticated`, or they'll bounce an
+  // actually-logged-in user to /login on every page refresh.
+  hasHydrated: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   fetchMe: () => Promise<void>;
   clearError: () => void;
+  setHasHydrated: (value: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -26,6 +34,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      hasHydrated: false,
 
       login: async (email, password) => {
         set({ isLoading: true, error: null });
@@ -75,6 +84,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       clearError: () => set({ error: null }),
+      setHasHydrated: (value) => set({ hasHydrated: value }),
     }),
     {
       name: "sms-auth",
@@ -82,6 +92,9 @@ export const useAuthStore = create<AuthState>()(
       // (which contains email and PII). The user profile is re-fetched via
       // fetchMe() when the layout mounts after a page refresh.
       partialize: (s) => ({ isAuthenticated: s.isAuthenticated, role: s.role }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     },
   ),
 );
