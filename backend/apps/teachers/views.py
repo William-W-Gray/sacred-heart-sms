@@ -6,15 +6,17 @@ from apps.users.views import IsAdminUser
 
 
 class TeacherSerializer(serializers.ModelSerializer):
-    class_ids = serializers.SerializerMethodField(read_only=True)
-    class_id = serializers.IntegerField(required=False, write_only=True, allow_null=True)
+    # A teacher can be the homeroom (class) teacher for more than one class,
+    # so this is a list, not a single FK — write side accepts the full set
+    # of class ids; read side (to_representation below) reports the same.
+    class_ids = serializers.ListField(child=serializers.IntegerField(), required=False, write_only=True)
     subjects = serializers.ListField(child=serializers.IntegerField(), required=False, write_only=True)
 
     class Meta:
         model = Teacher
         fields = ["id", "full_name", "email", "phone_number", "subject",
                   "employee_id", "photo", "is_active", "created_at",
-                  "class_id", "class_ids", "subjects"]
+                  "class_ids", "subjects"]
         read_only_fields = ["created_at"]
 
     def get_class_ids(self, obj) -> list:
@@ -25,6 +27,7 @@ class TeacherSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
+        ret["class_ids"] = self.get_class_ids(instance)
         ret["subjects"] = self.get_subjects(instance)
         request = self.context.get("request")
         if request and request.user and request.user.role in ("student", "guardian"):
@@ -57,17 +60,17 @@ class TeacherSerializer(serializers.ModelSerializer):
         from apps.users.models import User
         import random
 
-        class_id = validated_data.pop("class_id", None)
+        class_ids = validated_data.pop("class_ids", None)
         subjects_data = validated_data.pop("subjects", None)
 
         with transaction.atomic():
             email = validated_data.get("email")
             full_name = validated_data.get("full_name", "")
-            
+
             parts = full_name.split(" ", 1)
             first_name = parts[0]
             last_name = parts[1] if len(parts) > 1 else ""
-            
+
             user, created = User.objects.get_or_create(
                 email=email,
                 defaults={
@@ -92,20 +95,16 @@ class TeacherSerializer(serializers.ModelSerializer):
             validated_data["user"] = user
             teacher = super().create(validated_data)
 
-            if class_id:
+            if class_ids:
                 from apps.students.models import Class
-                Class.objects.filter(id=class_id).update(class_teacher=teacher)
+                Class.objects.filter(id__in=class_ids).update(class_teacher=teacher)
 
             if subjects_data:
-                from apps.students.models import Class, AcademicYear
+                from apps.students.models import AcademicYear
                 from .models import TeacherAssignment
                 active_year = AcademicYear.objects.filter(is_current=True).first()
-                if active_year:
-                    classes = list(teacher.homeroom_class.all())
-                    if not classes:
-                        first_cls = Class.objects.first()
-                        classes = [first_cls] if first_cls else []
-                    
+                classes = list(teacher.homeroom_class.all())
+                if active_year and classes:
                     for cls in classes:
                         for sub_id in subjects_data:
                             TeacherAssignment.objects.get_or_create(
@@ -120,7 +119,7 @@ class TeacherSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         from django.db import transaction
-        class_id = validated_data.pop("class_id", None)
+        class_ids = validated_data.pop("class_ids", None)
         subjects_data = validated_data.pop("subjects", None)
 
         with transaction.atomic():
@@ -134,25 +133,21 @@ class TeacherSerializer(serializers.ModelSerializer):
                 user.last_name = parts[1] if len(parts) > 1 else ""
                 user.save()
 
-            if class_id is not None:
+            if class_ids is not None:
                 from apps.students.models import Class
                 Class.objects.filter(class_teacher=teacher).update(class_teacher=None)
-                if class_id:
-                    Class.objects.filter(id=class_id).update(class_teacher=teacher)
+                if class_ids:
+                    Class.objects.filter(id__in=class_ids).update(class_teacher=teacher)
 
             if subjects_data is not None:
-                from apps.students.models import Class, AcademicYear
+                from apps.students.models import AcademicYear
                 from .models import TeacherAssignment
-                
+
                 active_year = AcademicYear.objects.filter(is_current=True).first()
                 if active_year:
                     TeacherAssignment.objects.filter(teacher=teacher, academic_year=active_year).delete()
-                    
+
                     classes = list(teacher.homeroom_class.all())
-                    if not classes:
-                        first_cls = Class.objects.first()
-                        classes = [first_cls] if first_cls else []
-                    
                     for cls in classes:
                         for sub_id in subjects_data:
                             TeacherAssignment.objects.create(

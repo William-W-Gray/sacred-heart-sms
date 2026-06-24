@@ -113,6 +113,11 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 25,
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    # Catches anything DRF doesn't already turn into a clean response (e.g.
+    # IntegrityError races, programming errors) so the frontend always gets
+    # parseable JSON with an actionable message instead of an opaque HTML
+    # 500 page — see config/exception_handlers.py.
+    "EXCEPTION_HANDLER": "config.exception_handlers.api_exception_handler",
     # Scoped throttle rates. No DEFAULT_THROTTLE_CLASSES is set, so normal
     # API traffic is unaffected — only views that opt in via throttle_classes
     # (e.g. SMSTokenView's "login" scope) are rate-limited.

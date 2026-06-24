@@ -74,7 +74,7 @@ class Command(BaseCommand):
                 user.save()
             teacher, _ = Teacher.objects.get_or_create(
                 user=user,
-                defaults=dict(full_name=full_name, email=email, employee_id=employee_id, department=dept),
+                defaults=dict(full_name=full_name, email=email, employee_id=employee_id, subject=dept),
             )
             # Assignments
             cls_obj = classes.get(cls_name)
