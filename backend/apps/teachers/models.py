@@ -8,7 +8,7 @@ class Teacher(models.Model):
     full_name   = models.CharField(max_length=200)
     email       = models.EmailField(unique=True)
     phone_number = models.CharField(max_length=30, blank=True)
-    department  = models.CharField(max_length=100, blank=True)
+    subject     = models.CharField(max_length=100, blank=True)
     employee_id = models.CharField(max_length=50, unique=True, blank=True)
     photo       = models.ImageField(upload_to="teachers/photos/", null=True, blank=True)
     is_active   = models.BooleanField(default=True)

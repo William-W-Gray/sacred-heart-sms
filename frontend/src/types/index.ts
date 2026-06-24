@@ -122,11 +122,11 @@ export interface Teacher {
   full_name: string;
   email: string;
   phone_number: string;
-  department: string;
+  subject: string;
   employee_id: string;
   photo: string | null;
   is_active: boolean;
-  class_id: number | null;
+  class_ids: number[];
   subjects: number[];
 }
 

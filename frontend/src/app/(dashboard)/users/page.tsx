@@ -6,7 +6,8 @@ import {
 } from "lucide-react";
 import {
   useUsers, useCreateUser, useUpdateUser, useDeleteUser,
-  useResetUserPassword, useClasses, useStudents, useGuardians
+  useResetUserPassword, useClasses, useStudents, useGuardians,
+  useSubjects, useCreateSubject
 } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/lib/utils/errors";
@@ -19,9 +20,10 @@ interface UserProfileDetails {
   current_class_name?: string;
   class_id?: number;
   employee_id?: string;
-  department?: string;
+  subject?: string;
   phone_number?: string;
   homeroom_class_name?: string;
+  class_ids?: number[];
   occupation?: string;
   address?: string;
 }
@@ -42,10 +44,7 @@ const ROLE_COLORS: Record<UserRole, string> = {
   guardian:        "bg-[var(--warn-bg)] text-[var(--warn)] border-[var(--warn)]/20",
 };
 
-const DEPARTMENTS = [
-  "Sciences", "Mathematics", "Arts & Humanities",
-  "Social Sciences", "Physical Education", "Religious Studies", "Vocational",
-];
+// DEPARTMENTS array removed - using dynamic DB subjects instead
 
 const RELATIONSHIPS = [
   { value: "father",      label: "Father" },
@@ -122,6 +121,8 @@ function UserModal({ userToEdit, onClose }: UserModalProps) {
   const { data: classesData } = useClasses();
   const { data: studentsData } = useStudents({ page_size: 100 });
   const { data: guardiansData } = useGuardians({ page_size: 100 });
+  const { data: subjectsData } = useSubjects();
+  const createSubjectMutation = useCreateSubject();
 
   const details = userToEdit?.profile_details as UserProfileDetails | undefined | null;
 
@@ -138,8 +139,12 @@ function UserModal({ userToEdit, onClose }: UserModalProps) {
   const [date_of_birth, setDateOfBirth] = useState("");
   const [current_class, setCurrentClass] = useState<number | "">(details?.class_id ?? "");
   
+  // Teachers multi-class and subject
   const [employee_id, setEmployeeId] = useState(details?.employee_id ?? "");
-  const [department, setDepartment] = useState(details?.department ?? "Sciences");
+  const [subject, setSubject] = useState(details?.subject ?? "");
+  const [class_ids, setClassIds] = useState<number[]>(
+    details?.class_ids ?? (details?.class_id ? [details.class_id] : [])
+  );
   const [phone_number, setPhoneNumber] = useState(details?.phone_number ?? "");
 
   const [address, setAddress] = useState(details?.address ?? "");
@@ -149,6 +154,43 @@ function UserModal({ userToEdit, onClose }: UserModalProps) {
   const [guardian_id, setGuardianId] = useState<number | "">("");
   const [student_id_link, setStudentIdLink] = useState<number | "">("");
   const [relationship, setRelationship] = useState("other");
+
+  // Inline Subject form state
+  const [showAddSubjectForm, setShowAddSubject] = useState(false);
+  const [newSubjectName, setNewSubjectName] = useState("");
+  const [newSubjectCode, setNewSubjectCode] = useState("");
+  const [isCreatingSubject, setIsCreatingSubject] = useState(false);
+
+  const toggleClass = (id: number) => {
+    if (class_ids.includes(id)) {
+      setClassIds(class_ids.filter((c) => c !== id));
+    } else {
+      setClassIds([...class_ids, id]);
+    }
+  };
+
+  const handleAddNewSubject = async () => {
+    if (!newSubjectName.trim() || !newSubjectCode.trim()) {
+      toast({ title: "Name and code are required", variant: "error" });
+      return;
+    }
+    setIsCreatingSubject(true);
+    try {
+      await createSubjectMutation.mutateAsync({
+        name: newSubjectName.trim(),
+        code: newSubjectCode.trim().toUpperCase(),
+      });
+      setSubject(newSubjectName.trim());
+      setNewSubjectName("");
+      setNewSubjectCode("");
+      setShowAddSubject(false);
+      toast({ title: `Subject "${newSubjectName}" created and selected`, variant: "success" });
+    } catch (err) {
+      toast({ title: getApiErrorMessage(err, "Failed to create subject"), variant: "error" });
+    } finally {
+      setIsCreatingSubject(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!first_name.trim() || !last_name.trim()) {
@@ -188,9 +230,9 @@ function UserModal({ userToEdit, onClose }: UserModalProps) {
       }
     } else if (role === "teacher") {
       if (employee_id.trim()) payload.employee_id = employee_id;
-      payload.department = department;
+      payload.subject = subject;
       payload.phone_number = phone_number;
-      if (current_class) payload.current_class = Number(current_class); // homeroom class
+      payload.class_ids = class_ids;
     } else if (role === "guardian") {
       payload.phone_number = phone_number;
       payload.address = address;
@@ -377,10 +419,53 @@ function UserModal({ userToEdit, onClose }: UserModalProps) {
                   />
                 </div>
                 <div>
-                  <label className="form-label">Department</label>
-                  <select className="form-input" value={department} onChange={(e) => setDepartment(e.target.value)}>
-                    {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
-                  </select>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="form-label mb-0">Main Subject</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddSubject(!showAddSubjectForm)}
+                      className="text-[11px] text-[var(--gold)] hover:text-[var(--gold-dim)] hover:underline font-medium transition-colors"
+                    >
+                      {showAddSubjectForm ? "Cancel" : "+ Add New Subject"}
+                    </button>
+                  </div>
+                  
+                  {showAddSubjectForm ? (
+                    <div className="p-3 bg-navy-pale rounded-lg border border-[var(--border)] space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={newSubjectName}
+                          onChange={(e) => setNewSubjectName(e.target.value)}
+                          placeholder="Name"
+                          className="form-input text-xs px-2 py-1"
+                        />
+                        <input
+                          type="text"
+                          value={newSubjectCode}
+                          onChange={(e) => setNewSubjectCode(e.target.value)}
+                          placeholder="Code"
+                          className="form-input text-xs px-2 py-1 font-mono"
+                          maxLength={10}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddNewSubject}
+                        disabled={isCreatingSubject}
+                        className="btn-gold text-[10px] px-2 py-1 w-full justify-center"
+                      >
+                        {isCreatingSubject ? "Creating..." : "✓ Save & Select"}
+                      </button>
+                    </div>
+                  ) : (
+                    <select className="form-input" value={subject} onChange={(e) => setSubject(e.target.value)}>
+                      <option value="">Select subject…</option>
+                      {subjectsData?.results?.map((sub) => (
+                        <option key={sub.id} value={sub.name}>{sub.name} ({sub.code})</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div>
                   <label className="form-label">Phone Number</label>
@@ -391,18 +476,32 @@ function UserModal({ userToEdit, onClose }: UserModalProps) {
                     onChange={(e) => setPhoneNumber(e.target.value)}
                   />
                 </div>
-                <div>
-                  <label className="form-label">Assigned Homeroom Class</label>
-                  <select
-                    className="form-input"
-                    value={current_class}
-                    onChange={(e) => setCurrentClass(e.target.value ? Number(e.target.value) : "")}
-                  >
-                    <option value="">— None —</option>
-                    {classesData?.results?.map((c: ClassGroup) => (
-                      <option key={c.id} value={c.id}>Grade {c.name}</option>
-                    ))}
-                  </select>
+                <div className="sm:col-span-2">
+                  <label className="form-label">Assigned Homeroom Classes</label>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {classesData?.results
+                      ?.sort((a, b) => b.grade - a.grade || a.section.localeCompare(b.section))
+                      .map((c: ClassGroup) => {
+                        const selected = class_ids.includes(c.id);
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => toggleClass(c.id)}
+                            className={`px-3 py-1.5 text-xs rounded-full border transition-all ${
+                              selected
+                                ? "bg-navy text-white border-navy shadow-sm"
+                                : "bg-white text-[#5A6A8A] border-[var(--border-strong)] hover:border-navy hover:text-navy"
+                            }`}
+                          >
+                            Grade {c.name}
+                          </button>
+                        );
+                      })}
+                    {!classesData?.results?.length && (
+                      <span className="text-xs text-[var(--muted)]">No classes available</span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -478,8 +577,10 @@ function UserModal({ userToEdit, onClose }: UserModalProps) {
 
         <div className="flex justify-end gap-3 px-6 py-4 border-t border-[var(--border)] sticky bottom-0 bg-white z-10">
           <button onClick={onClose} className="btn-outline">Cancel</button>
-          <button onClick={handleSave} disabled={createUser.isPending || updateUser.isPending} className="btn-gold disabled:opacity-60">
-            {createUser.isPending || updateUser.isPending ? "Saving…" : "✓ Save Account"}
+          <button onClick={handleSave} disabled={createUser.isPending || updateUser.isPending} className="btn-gold disabled:opacity-60 flex items-center gap-2">
+            {createUser.isPending || updateUser.isPending ? (
+              <><span className="w-3 h-3 border-2 border-navy-deep/30 border-t-navy-deep rounded-full animate-spin" />Saving…</>
+            ) : "✓ Save Account"}
           </button>
         </div>
       </div>
@@ -559,7 +660,7 @@ export default function UsersPage() {
         <div className="flex flex-col text-xs">
           <div className="flex items-center gap-1 font-medium text-navy">
             <UserCheck size={12} className="text-[var(--gold)]" />
-            <span>ID: {details.employee_id} · {details.department}</span>
+            <span>ID: {details.employee_id} · {details.subject || "—"}</span>
           </div>
           {details.phone_number && (
             <div className="text-[11px] text-[var(--muted)] flex items-center gap-1 mt-0.5">

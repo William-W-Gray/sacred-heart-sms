@@ -44,9 +44,10 @@ class UserSerializer(serializers.ModelSerializer):
     gender = serializers.CharField(required=False, write_only=True, allow_blank=True)
     date_of_birth = serializers.DateField(required=False, write_only=True, allow_null=True)
     current_class = serializers.IntegerField(required=False, write_only=True, allow_null=True)
+    class_ids = serializers.ListField(child=serializers.IntegerField(), required=False, write_only=True)
 
     employee_id = serializers.CharField(required=False, write_only=True, allow_blank=True)
-    department = serializers.CharField(required=False, write_only=True, allow_blank=True)
+    subject = serializers.CharField(required=False, write_only=True, allow_blank=True)
     phone_number = serializers.CharField(required=False, write_only=True, allow_blank=True)
 
     address = serializers.CharField(required=False, write_only=True, allow_blank=True)
@@ -61,8 +62,8 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             "id", "email", "first_name", "last_name", "role", "is_active", "date_joined", "profile_details",
             "student_id", "gender", "date_of_birth", "current_class",
-            "employee_id", "department", "phone_number",
-            "address", "occupation", "guardian_id", "relationship", "student_id_link"
+            "employee_id", "subject", "phone_number",
+            "address", "occupation", "guardian_id", "relationship", "student_id_link", "class_ids"
         ]
         read_only_fields = ["date_joined"]
 
@@ -77,12 +78,13 @@ class UserSerializer(serializers.ModelSerializer):
             }
         tp = getattr(obj, "teacher_profile", None)
         if obj.role == User.Role.TEACHER and tp:
+            classes = tp.homeroom_class.all()
             return {
                 "employee_id": tp.employee_id,
-                "department": tp.department,
+                "subject": tp.subject,
                 "phone_number": tp.phone_number,
-                "homeroom_class_name": str(tp.homeroom_class.first()) if tp.homeroom_class.exists() else None,
-                "class_id": tp.homeroom_class.first().id if tp.homeroom_class.exists() else None,
+                "homeroom_class_name": ", ".join([str(c) for c in classes]) if classes.exists() else None,
+                "class_ids": [c.id for c in classes],
             }
         gp = getattr(obj, "guardian_profile", None)
         if obj.role == User.Role.GUARDIAN and gp:
@@ -93,14 +95,36 @@ class UserSerializer(serializers.ModelSerializer):
             }
         return None
 
+    def validate_student_id(self, value):
+        if value:
+            from apps.students.models import Student
+            qs = Student.objects.filter(student_id=value)
+            if self.instance:
+                qs = qs.exclude(user=self.instance)
+            if qs.exists():
+                raise serializers.ValidationError("A student with this Student ID already exists.")
+        return value
+
+    def validate_employee_id(self, value):
+        if value:
+            from apps.teachers.models import Teacher
+            qs = Teacher.objects.filter(employee_id=value)
+            if self.instance:
+                qs = qs.exclude(user=self.instance)
+            if qs.exists():
+                raise serializers.ValidationError("A teacher with this Employee ID already exists.")
+        return value
+
     def update(self, instance, validated_data: dict) -> User:
+        from django.db import transaction
         student_id = validated_data.pop("student_id", None)
         gender = validated_data.pop("gender", None)
         date_of_birth = validated_data.pop("date_of_birth", None)
         current_class_id = validated_data.pop("current_class", None)
+        class_ids = validated_data.pop("class_ids", None)
 
         employee_id = validated_data.pop("employee_id", None)
-        department = validated_data.pop("department", None)
+        subject = validated_data.pop("subject", None)
         phone_number = validated_data.pop("phone_number", None)
 
         address = validated_data.pop("address", None)
@@ -110,73 +134,76 @@ class UserSerializer(serializers.ModelSerializer):
         relationship = validated_data.pop("relationship", None)
         student_id_link = validated_data.pop("student_id_link", None)
 
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
+        with transaction.atomic():
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            instance.save()
 
-        role = instance.role
-        if role == User.Role.STUDENT:
-            from apps.students.models import Student, Class, Guardian, StudentGuardian
-            sp, _ = Student.objects.get_or_create(user=instance, defaults={"student_id": student_id or f"CHS-UPD-{instance.id}"})
-            if student_id: sp.student_id = student_id
-            if gender: sp.gender = gender
-            if date_of_birth: sp.date_of_birth = date_of_birth
-            if current_class_id is not None:
-                sp.current_class_id = current_class_id
-            sp.first_name = instance.first_name
-            sp.last_name = instance.last_name
-            sp.save()
-            if guardian_id:
-                try:
-                    guardian = Guardian.objects.get(id=guardian_id)
-                    StudentGuardian.objects.get_or_create(
-                        student=sp,
-                        guardian=guardian,
-                        defaults={"relationship": relationship or "other", "is_primary": True}
-                    )
-                except Guardian.DoesNotExist:
-                    pass
+            role = instance.role
+            if role == User.Role.STUDENT:
+                from apps.students.models import Student, Class, Guardian, StudentGuardian
+                sp, _ = Student.objects.get_or_create(user=instance, defaults={"student_id": student_id or f"CHS-UPD-{instance.id}"})
+                if student_id: sp.student_id = student_id
+                if gender: sp.gender = gender
+                if date_of_birth: sp.date_of_birth = date_of_birth
+                if current_class_id is not None:
+                    sp.current_class_id = current_class_id
+                sp.first_name = instance.first_name
+                sp.last_name = instance.last_name
+                sp.save()
+                if guardian_id:
+                    try:
+                        guardian = Guardian.objects.get(id=guardian_id)
+                        StudentGuardian.objects.get_or_create(
+                            student=sp,
+                            guardian=guardian,
+                            defaults={"relationship": relationship or "other", "is_primary": True}
+                        )
+                    except Guardian.DoesNotExist:
+                        pass
 
-        elif role == User.Role.TEACHER:
-            from apps.teachers.models import Teacher
-            tp, _ = Teacher.objects.get_or_create(
-                user=instance,
-                defaults={"full_name": f"{instance.first_name} {instance.last_name}".strip(), "email": instance.email}
-            )
-            if employee_id: tp.employee_id = employee_id
-            if department: tp.department = department
-            if phone_number: tp.phone_number = phone_number
-            tp.full_name = f"{instance.first_name} {instance.last_name}".strip()
-            tp.email = instance.email
-            tp.save()
-            if current_class_id is not None:
-                from apps.students.models import Class
-                Class.objects.filter(class_teacher=tp).update(class_teacher=None)
-                if current_class_id:
-                    Class.objects.filter(id=current_class_id).update(class_teacher=tp)
+            elif role == User.Role.TEACHER:
+                from apps.teachers.models import Teacher
+                tp, _ = Teacher.objects.get_or_create(
+                    user=instance,
+                    defaults={"full_name": f"{instance.first_name} {instance.last_name}".strip(), "email": instance.email}
+                )
+                if employee_id: tp.employee_id = employee_id
+                if subject: tp.subject = subject
+                if phone_number: tp.phone_number = phone_number
+                tp.full_name = f"{instance.first_name} {instance.last_name}".strip()
+                tp.email = instance.email
+                tp.save()
 
-        elif role == User.Role.GUARDIAN:
-            from apps.students.models import Guardian, Student, StudentGuardian
-            gp, _ = Guardian.objects.get_or_create(
-                user=instance,
-                defaults={"full_name": f"{instance.first_name} {instance.last_name}".strip(), "phone_number": phone_number or ""}
-            )
-            if phone_number: gp.phone_number = phone_number
-            if address: gp.address = address
-            if occupation: gp.occupation = occupation
-            gp.full_name = f"{instance.first_name} {instance.last_name}".strip()
-            gp.email = instance.email
-            gp.save()
-            if student_id_link:
-                try:
-                    student = Student.objects.get(id=student_id_link)
-                    StudentGuardian.objects.get_or_create(
-                        student=student,
-                        guardian=gp,
-                        defaults={"relationship": relationship or "other", "is_primary": True}
-                    )
-                except Student.DoesNotExist:
-                    pass
+                if class_ids is not None or current_class_id is not None:
+                    from apps.students.models import Class
+                    Class.objects.filter(class_teacher=tp).update(class_teacher=None)
+                    ids_to_assign = class_ids if class_ids is not None else ([current_class_id] if current_class_id else [])
+                    if ids_to_assign:
+                        Class.objects.filter(id__in=ids_to_assign).update(class_teacher=tp)
+
+            elif role == User.Role.GUARDIAN:
+                from apps.students.models import Guardian, Student, StudentGuardian
+                gp, _ = Guardian.objects.get_or_create(
+                    user=instance,
+                    defaults={"full_name": f"{instance.first_name} {instance.last_name}".strip(), "phone_number": phone_number or ""}
+                )
+                if phone_number: gp.phone_number = phone_number
+                if address: gp.address = address
+                if occupation: gp.occupation = occupation
+                gp.full_name = f"{instance.first_name} {instance.last_name}".strip()
+                gp.email = instance.email
+                gp.save()
+                if student_id_link:
+                    try:
+                        student = Student.objects.get(id=student_id_link)
+                        StudentGuardian.objects.get_or_create(
+                            student=student,
+                            guardian=gp,
+                            defaults={"relationship": relationship or "other", "is_primary": True}
+                        )
+                    except Student.DoesNotExist:
+                        pass
 
         return instance
 
@@ -189,9 +216,10 @@ class UserCreateSerializer(serializers.ModelSerializer):
     gender = serializers.CharField(required=False, write_only=True, allow_blank=True)
     date_of_birth = serializers.DateField(required=False, write_only=True, allow_null=True)
     current_class = serializers.IntegerField(required=False, write_only=True, allow_null=True)
+    class_ids = serializers.ListField(child=serializers.IntegerField(), required=False, write_only=True)
 
     employee_id = serializers.CharField(required=False, write_only=True, allow_blank=True)
-    department = serializers.CharField(required=False, write_only=True, allow_blank=True)
+    subject = serializers.CharField(required=False, write_only=True, allow_blank=True)
     phone_number = serializers.CharField(required=False, write_only=True, allow_blank=True)
 
     address = serializers.CharField(required=False, write_only=True, allow_blank=True)
@@ -206,11 +234,28 @@ class UserCreateSerializer(serializers.ModelSerializer):
         fields = [
             "id", "email", "first_name", "last_name", "role", "password",
             "student_id", "gender", "date_of_birth", "current_class",
-            "employee_id", "department", "phone_number",
-            "address", "occupation", "guardian_id", "relationship", "student_id_link"
+            "employee_id", "subject", "phone_number",
+            "address", "occupation", "guardian_id", "relationship", "student_id_link", "class_ids"
         ]
 
+    def validate_student_id(self, value):
+        if value:
+            from apps.students.models import Student
+            qs = Student.objects.filter(student_id=value)
+            if qs.exists():
+                raise serializers.ValidationError("A student with this Student ID already exists.")
+        return value
+
+    def validate_employee_id(self, value):
+        if value:
+            from apps.teachers.models import Teacher
+            qs = Teacher.objects.filter(employee_id=value)
+            if qs.exists():
+                raise serializers.ValidationError("A teacher with this Employee ID already exists.")
+        return value
+
     def create(self, validated_data: dict) -> User:
+        from django.db import transaction
         role = validated_data.get("role")
         email = validated_data.get("email")
         first_name = validated_data.get("first_name", "")
@@ -221,9 +266,10 @@ class UserCreateSerializer(serializers.ModelSerializer):
         gender = validated_data.pop("gender", "M")
         date_of_birth = validated_data.pop("date_of_birth", None)
         current_class_id = validated_data.pop("current_class", None)
+        class_ids = validated_data.pop("class_ids", None)
 
         employee_id = validated_data.pop("employee_id", "")
-        department = validated_data.pop("department", "")
+        subject = validated_data.pop("subject", "")
         phone_number = validated_data.pop("phone_number", "")
 
         address = validated_data.pop("address", "")
@@ -234,79 +280,83 @@ class UserCreateSerializer(serializers.ModelSerializer):
         relationship = validated_data.pop("relationship", "other")
         student_id_link = validated_data.pop("student_id_link", None)
 
-        user = User.objects.create_user(**validated_data)
+        with transaction.atomic():
+            user = User.objects.create_user(**validated_data)
 
-        if role == User.Role.STUDENT:
-            from apps.students.models import Student, Class, Guardian, StudentGuardian
-            if not student_id:
-                import random
-                student_id = f"CHS-2026-{random.randint(100, 999)}"
+            if role == User.Role.STUDENT:
+                from apps.students.models import Student, Class, Guardian, StudentGuardian
+                if not student_id:
+                    import random
+                    while True:
+                        student_id = f"CHS-2026-{random.randint(1000, 9999)}"
+                        if not Student.objects.filter(student_id=student_id).exists():
+                            break
 
-            student = Student.objects.create(
-                user=user,
-                student_id=student_id,
-                first_name=first_name,
-                last_name=last_name,
-                gender=gender,
-                date_of_birth=date_of_birth,
-                current_class_id=current_class_id
-            )
-            if guardian_id:
-                try:
-                    guardian = Guardian.objects.get(id=guardian_id)
-                    StudentGuardian.objects.create(
-                        student=student,
-                        guardian=guardian,
-                        relationship=relationship,
-                        is_primary=True
-                    )
-                except Guardian.DoesNotExist:
-                    pass
+                student = Student.objects.create(
+                    user=user,
+                    student_id=student_id,
+                    first_name=first_name,
+                    last_name=last_name,
+                    gender=gender,
+                    date_of_birth=date_of_birth,
+                    current_class_id=current_class_id
+                )
+                if guardian_id:
+                    try:
+                        guardian = Guardian.objects.get(id=guardian_id)
+                        StudentGuardian.objects.create(
+                            student=student,
+                            guardian=guardian,
+                            relationship=relationship,
+                            is_primary=True
+                        )
+                    except Guardian.DoesNotExist:
+                        pass
 
-        elif role == User.Role.TEACHER:
-            from apps.teachers.models import Teacher
-            if not employee_id:
-                import random
-                employee_id = f"EMP-{random.randint(100, 999)}"
+            elif role == User.Role.TEACHER:
+                from apps.teachers.models import Teacher
+                if not employee_id:
+                    import random
+                    while True:
+                        employee_id = f"EMP-{random.randint(1000, 9999)}"
+                        if not Teacher.objects.filter(employee_id=employee_id).exists():
+                            break
 
-            teacher = Teacher.objects.create(
-                user=user,
-                full_name=f"{first_name} {last_name}".strip(),
-                email=email,
-                employee_id=employee_id,
-                department=department,
-                phone_number=phone_number
-            )
-            if current_class_id:
-                from apps.students.models import Class
-                try:
-                    cls = Class.objects.get(id=current_class_id)
-                    cls.class_teacher = teacher
-                    cls.save()
-                except Class.DoesNotExist:
-                    pass
+                teacher = Teacher.objects.create(
+                    user=user,
+                    full_name=f"{first_name} {last_name}".strip(),
+                    email=email,
+                    employee_id=employee_id,
+                    subject=subject,
+                    phone_number=phone_number
+                )
+                
+                ids_to_assign = class_ids if class_ids is not None else ([current_class_id] if current_class_id else [])
+                if ids_to_assign:
+                    from apps.students.models import Class
+                    Class.objects.filter(id__in=ids_to_assign).update(class_teacher=teacher)
 
-        elif role == User.Role.GUARDIAN:
-            from apps.students.models import Guardian, Student, StudentGuardian
-            guardian = Guardian.objects.create(
-                user=user,
-                full_name=f"{first_name} {last_name}".strip(),
-                phone_number=phone_number,
-                email=email,
-                address=address,
-                occupation=occupation
-            )
-            if student_id_link:
-                try:
-                    student = Student.objects.get(id=student_id_link)
-                    StudentGuardian.objects.create(
-                        student=student,
-                        guardian=guardian,
-                        relationship=relationship,
-                        is_primary=True
-                    )
-                except Student.DoesNotExist:
-                    pass
+            elif role == User.Role.GUARDIAN:
+                from apps.students.models import Guardian, Student, StudentGuardian
+                guardian = Guardian.objects.create(
+                    user=user,
+                    full_name=f"{first_name} {last_name}".strip(),
+                    phone_number=phone_number,
+                    email=email,
+                    address=address,
+                    occupation=occupation
+                )
+                if student_id_link:
+                    try:
+                        student = Student.objects.get(id=student_id_link)
+                        StudentGuardian.objects.create(
+                            student=student,
+                            guardian=guardian,
+                            relationship=relationship,
+                            is_primary=True
+                        )
+                    except Student.DoesNotExist:
+                        pass
 
         return user
 

@@ -52,7 +52,7 @@ export default function TeachersPage() {
               <table className="w-full text-sm border-collapse min-w-[640px]">
                 <thead className="bg-[var(--surface)]">
                   <tr>
-                    {["Teacher", "Email", "Phone", "Department", "Subjects", "Actions"].map((h) => (
+                    {["Teacher", "Email", "Phone", "Main Subject", "Teaching Subjects", "Actions"].map((h) => (
                       <th key={h} className="text-left px-4 py-3 text-[11px] font-semibold text-[#5A6A8A] uppercase tracking-wider border-b border-[var(--border)]">{h}</th>
                     ))}
                   </tr>
@@ -67,13 +67,13 @@ export default function TeachersPage() {
                           </div>
                           <div>
                             <p className="font-medium text-navy">{t.full_name}</p>
-                            <p className="text-xs text-[#5A6A8A]">{t.department || "—"}</p>
+                            <p className="text-xs text-[#5A6A8A]">{t.subject || "—"}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-[#5A6A8A] text-xs">{t.email}</td>
                       <td className="px-4 py-3 text-[#5A6A8A] text-xs">{t.phone_number || "—"}</td>
-                      <td className="px-4 py-3 text-[#5A6A8A] text-xs">{t.department || "—"}</td>
+                      <td className="px-4 py-3 text-[#5A6A8A] text-xs">{t.subject || "—"}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {(t.subjects ?? []).slice(0, 3).map((sid) => (
