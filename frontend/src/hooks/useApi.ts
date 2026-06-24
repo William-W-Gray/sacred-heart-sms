@@ -5,7 +5,7 @@ import {
   promotionsApi, financeApi, notificationsApi, usersApi,
   type CreateUserPayload,
 } from "@/lib/api/services";
-import type { Student, UserRole } from "@/types";
+import type { Student } from "@/types";
 
 // ── Query key factory ────────────────────────────────────────────
 export const QK = {
@@ -283,7 +283,7 @@ export const useCreateUser = () => {
 export const useUpdateUser = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...d }: { id: number; role?: UserRole; is_active?: boolean }) =>
+    mutationFn: ({ id, ...d }: { id: number } & Record<string, unknown>) =>
       usersApi.update(id, d),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });
@@ -296,3 +296,9 @@ export const useDeleteUser = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });
 };
+
+export const useResetUserPassword = () =>
+  useMutation({
+    mutationFn: ({ id, password }: { id: number; password: string }) =>
+      usersApi.adminResetPassword(id, password),
+  });

@@ -55,7 +55,23 @@ const processQueue = (error: unknown, token: string | null) => {
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean; _retryCount?: number };
+
+    // ── Retry on transient network errors (e.g. ERR_NETWORK_CHANGED) ──
+    // Only retry safe/idempotent methods and skip auth endpoints to avoid
+    // double-login attempts. Max 2 retries with exponential backoff.
+    const isNetworkError = !error.response && error.code !== "ECONNABORTED";
+    const isSafeMethod   = ["get", "head", "options", "put", "patch"].includes(
+      (original?.method ?? "").toLowerCase(),
+    );
+    const isAuthEndpoint = original?.url?.includes("/auth/");
+    const retryCount     = original?._retryCount ?? 0;
+
+    if (isNetworkError && isSafeMethod && !isAuthEndpoint && retryCount < 2) {
+      original._retryCount = retryCount + 1;
+      await new Promise((r) => setTimeout(r, 800 * original._retryCount!));
+      return api(original);
+    }
 
     if (error.response?.status !== 401 || original._retry) {
       return Promise.reject(error);

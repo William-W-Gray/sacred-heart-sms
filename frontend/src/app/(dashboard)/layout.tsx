@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils/cn";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import type { UserRole } from "@/types";
 
-type NavItem = { href: string; icon: React.ElementType; label: string };
+type NavItem = { href: string; icon: React.ElementType; label: string; roles?: UserRole[] };
 type NavSection = { label: string; items: NavItem[]; roles?: UserRole[] };
 
 const NAV: NavSection[] = [
@@ -23,8 +23,8 @@ const NAV: NavSection[] = [
   ]},
   { label: "People", roles: ["admin", "teacher", "finance_officer"], items: [
     { href: "/students",  icon: GraduationCap, label: "Students" },
-    { href: "/teachers",  icon: UserCheck,     label: "Teachers" },
-    { href: "/guardians", icon: Users,          label: "Guardians" },
+    { href: "/teachers",  icon: UserCheck,     label: "Teachers", roles: ["admin", "teacher"] },
+    { href: "/guardians", icon: Users,          label: "Guardians", roles: ["admin"] },
   ]},
   { label: "Academic", roles: ["admin", "teacher"], items: [
     { href: "/attendance",  icon: CalendarDays, label: "Attendance" },
@@ -161,7 +161,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {section.label}
               </p>
               <div className="space-y-0.5">
-                {section.items.map((item) => {
+                {section.items
+                  .filter((item) => !item.roles || (role && item.roles.includes(role as UserRole)))
+                  .map((item) => {
                   const active = pathname === item.href || pathname.startsWith(item.href + "/");
                   return (
                     <Link

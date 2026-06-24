@@ -18,6 +18,7 @@ export interface ManagedUser {
   role: UserRole;
   is_active: boolean;
   date_joined: string;
+  profile_details?: Record<string, unknown> | null;
 }
 export interface CreateUserPayload {
   email: string;
@@ -29,8 +30,12 @@ export interface CreateUserPayload {
 export const usersApi = {
   list:   (p?: Record<string, unknown>) => api.get<{ results: ManagedUser[]; count: number }>("/api/users/", { params: p }).then((r) => r.data),
   create: (d: CreateUserPayload) => api.post<ManagedUser>("/api/users/", d).then((r) => r.data),
-  update: (id: number, d: Partial<Pick<ManagedUser, "role" | "is_active">>) => api.patch<ManagedUser>(`/api/users/${id}/`, d).then((r) => r.data),
+  update: (id: number, d: Record<string, unknown>) =>
+    api.patch<ManagedUser>(`/api/users/${id}/`, d).then((r) => r.data),
   delete: (id: number) => api.delete(`/api/users/${id}/`).then((r) => r.data),
+  /** Admin force-reset: sets a new password without needing the old one */
+  adminResetPassword: (id: number, new_password: string) =>
+    api.post(`/api/users/${id}/reset-password/`, { password: new_password }).then((r) => r.data),
 };
 
 // ── Generic helpers ──────────────────────────────────────────────
