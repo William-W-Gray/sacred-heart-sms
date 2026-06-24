@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback } from "react";
 import { Save } from "lucide-react";
-import { useStudents, useClasses, useSubjects, useMarks, useSaveMarksBulk, useGradingScales, useAcademicYears } from "@/hooks/useApi";
+import { useStudents, useClasses, useSubjects, useMarks, useSaveMarksBulk, useGradingScales, useAcademicYears, useSemesters } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
 import { QueryError } from "@/components/shared/QueryError";
 import { getApiErrorMessage } from "@/lib/utils/errors";
@@ -28,7 +28,8 @@ const GRADE_COLOR: Record<string, string> = {
 };
 
 type MarkDraft = {
-  id?: number;
+  s1id?: number;
+  s2id?: number;
   s1t: number | null;
   s1e: number | null;
   s2t: number | null;
@@ -47,6 +48,13 @@ export default function MarksPage() {
   const { data: scaleData } = useGradingScales();
   const scale = scaleData?.results ?? [];
 
+  const currentYear = years?.results?.find((y) => y.is_current);
+  const { data: semestersData } = useSemesters(
+    currentYear ? { academic_year: currentYear.id } : undefined,
+  );
+  const sem1 = semestersData?.results?.find((s) => s.number === 1);
+  const sem2 = semestersData?.results?.find((s) => s.number === 2);
+
   const { data: students, isError: studentsError, refetch: refetchStudents } = useStudents(
     selClass ? { current_class: selClass, page_size: 100 } : undefined,
   );
@@ -59,16 +67,20 @@ export default function MarksPage() {
 
   const saveMarks = useSaveMarksBulk();
 
-  // Merge saved marks with draft edits
+  // A student has up to two separate Mark rows for a subject — one per
+  // semester — not one row with four score columns, so each semester's
+  // saved mark has to be looked up (and saved back) separately.
   const getMarkForStudent = (studentId: number): MarkDraft => {
-    const saved = marksData?.results?.find((m: Mark) => m.student === studentId);
+    const s1Saved = sem1 && marksData?.results?.find((m: Mark) => m.student === studentId && m.semester === sem1.id);
+    const s2Saved = sem2 && marksData?.results?.find((m: Mark) => m.student === studentId && m.semester === sem2.id);
     const draft = drafts[studentId];
     return {
-      id:  saved?.id,
-      s1t: draft?.s1t  !== undefined ? draft.s1t  : (saved?.test_score  ?? null),
-      s1e: draft?.s1e  !== undefined ? draft.s1e  : (saved?.exam_score  ?? null),
-      s2t: draft?.s2t  !== undefined ? draft.s2t  : null,  // extend when semester 2 marks added
-      s2e: draft?.s2e  !== undefined ? draft.s2e  : null,
+      s1id: s1Saved?.id,
+      s2id: s2Saved?.id,
+      s1t: draft?.s1t !== undefined ? draft.s1t : (s1Saved?.test_score ?? null),
+      s1e: draft?.s1e !== undefined ? draft.s1e : (s1Saved?.exam_score ?? null),
+      s2t: draft?.s2t !== undefined ? draft.s2t : (s2Saved?.test_score ?? null),
+      s2e: draft?.s2e !== undefined ? draft.s2e : (s2Saved?.exam_score ?? null),
     };
   };
 
@@ -85,17 +97,21 @@ export default function MarksPage() {
       toast({ title: "Select a class and subject first", variant: "error" });
       return;
     }
+    if (!sem1 && !sem2) {
+      toast({ title: "No semesters found for the current academic year", variant: "error" });
+      return;
+    }
     const studs = students?.results ?? [];
-    const records = studs.map((s) => {
+    const records = studs.flatMap((s) => {
       const d = getMarkForStudent(s.id);
-      return {
-        id:         d.id,
-        student:    s.id,
-        subject:    Number(selSub),
-        semester:   1,  // extend to dynamic semester selection
-        test_score: d.s1t,
-        exam_score: d.s1e,
-      };
+      const recs: { id?: number; student: number; subject: number; semester: number; test_score: number | null; exam_score: number | null }[] = [];
+      if (sem1) {
+        recs.push({ id: d.s1id, student: s.id, subject: Number(selSub), semester: sem1.id, test_score: d.s1t, exam_score: d.s1e });
+      }
+      if (sem2) {
+        recs.push({ id: d.s2id, student: s.id, subject: Number(selSub), semester: sem2.id, test_score: d.s2t, exam_score: d.s2e });
+      }
+      return recs;
     });
     try {
       const res = await saveMarks.mutateAsync(records);
@@ -107,7 +123,6 @@ export default function MarksPage() {
   };
 
   const studs = students?.results ?? [];
-  const currentYear = years?.results?.find((y) => y.is_current);
 
   return (
     <>
@@ -206,8 +221,10 @@ export default function MarksPage() {
                           <input
                             type="number" min={0} max={100} step={0.5}
                             value={m.s1t ?? ""}
+                            disabled={!sem1}
+                            title={!sem1 ? "Semester 1 hasn't been created yet for this academic year" : undefined}
                             onChange={(e) => updateDraft(student.id, "s1t", e.target.value)}
-                            className="w-16 px-2 py-1 text-center text-sm border border-[var(--border-strong)] rounded font-mono bg-white focus:border-navy focus:ring-1 focus:ring-navy/10 outline-none"
+                            className="w-16 px-2 py-1 text-center text-sm border border-[var(--border-strong)] rounded font-mono bg-white focus:border-navy focus:ring-1 focus:ring-navy/10 outline-none disabled:bg-[var(--surface)] disabled:cursor-not-allowed"
                           />
                         </td>
                         {/* S1 Exam */}
@@ -215,8 +232,10 @@ export default function MarksPage() {
                           <input
                             type="number" min={0} max={100} step={0.5}
                             value={m.s1e ?? ""}
+                            disabled={!sem1}
+                            title={!sem1 ? "Semester 1 hasn't been created yet for this academic year" : undefined}
                             onChange={(e) => updateDraft(student.id, "s1e", e.target.value)}
-                            className="w-16 px-2 py-1 text-center text-sm border border-[var(--border-strong)] rounded font-mono bg-white focus:border-navy focus:ring-1 focus:ring-navy/10 outline-none"
+                            className="w-16 px-2 py-1 text-center text-sm border border-[var(--border-strong)] rounded font-mono bg-white focus:border-navy focus:ring-1 focus:ring-navy/10 outline-none disabled:bg-[var(--surface)] disabled:cursor-not-allowed"
                           />
                         </td>
                         {/* S1 Avg */}
@@ -228,8 +247,10 @@ export default function MarksPage() {
                           <input
                             type="number" min={0} max={100} step={0.5}
                             value={m.s2t ?? ""}
+                            disabled={!sem2}
+                            title={!sem2 ? "Semester 2 hasn't been created yet for this academic year" : undefined}
                             onChange={(e) => updateDraft(student.id, "s2t", e.target.value)}
-                            className="w-16 px-2 py-1 text-center text-sm border border-[var(--border-strong)] rounded font-mono bg-white focus:border-navy outline-none"
+                            className="w-16 px-2 py-1 text-center text-sm border border-[var(--border-strong)] rounded font-mono bg-white focus:border-navy outline-none disabled:bg-[var(--surface)] disabled:cursor-not-allowed"
                           />
                         </td>
                         {/* S2 Exam */}
@@ -237,8 +258,10 @@ export default function MarksPage() {
                           <input
                             type="number" min={0} max={100} step={0.5}
                             value={m.s2e ?? ""}
+                            disabled={!sem2}
+                            title={!sem2 ? "Semester 2 hasn't been created yet for this academic year" : undefined}
                             onChange={(e) => updateDraft(student.id, "s2e", e.target.value)}
-                            className="w-16 px-2 py-1 text-center text-sm border border-[var(--border-strong)] rounded font-mono bg-white focus:border-navy outline-none"
+                            className="w-16 px-2 py-1 text-center text-sm border border-[var(--border-strong)] rounded font-mono bg-white focus:border-navy outline-none disabled:bg-[var(--surface)] disabled:cursor-not-allowed"
                           />
                         </td>
                         {/* S2 Avg */}

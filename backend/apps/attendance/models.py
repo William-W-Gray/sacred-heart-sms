@@ -28,7 +28,9 @@ class AttendanceRecord(models.Model):
 
 
 class AttendanceSummary(models.Model):
-    """Pre-computed per student per semester — refresh via management command or Celery task."""
+    """Pre-computed per student per semester — see attendance/services.py.
+    Kept current automatically by AttendanceRecordViewSet.bulk; for backfills
+    or drift, run `manage.py refresh_attendance_summaries`."""
     student    = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="attendance_summaries")
     semester   = models.ForeignKey(Semester, on_delete=models.CASCADE)
     total_days = models.IntegerField(default=0)

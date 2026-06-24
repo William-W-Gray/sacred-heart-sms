@@ -136,6 +136,16 @@ class AttendanceRecordViewSet(viewsets.ModelViewSet):
                     serializer.save()
                 results.append(serializer.instance)
 
+        # Best-effort: the attendance records themselves already committed
+        # above, so a failure recomputing the (precomputed, cache-like)
+        # summary shouldn't turn an otherwise-successful save into an error.
+        try:
+            from .services import refresh_summaries_for_records
+            refresh_summaries_for_records(results)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Failed to refresh AttendanceSummary after bulk save")
+
         return Response(AttendanceRecordSerializer(results, many=True).data)
 
 

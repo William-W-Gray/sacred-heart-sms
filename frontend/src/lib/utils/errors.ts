@@ -76,6 +76,16 @@ export function getApiErrorMessage(err: unknown, fallback: string): string {
   }
 
   const data = err.response.data;
+
+  // DRF renders a plain-string ValidationError (raised outside a dict, e.g.
+  // `raise ValidationError("message")`) as a bare JSON array, not an object —
+  // `{ "detail": ... }` never shows up. Check this before the object branch
+  // below, since `typeof [] === "object"` is true and would otherwise let
+  // this fall through to the generic fallback.
+  if (Array.isArray(data) && typeof data[0] === "string") {
+    return data[0];
+  }
+
   if (data && typeof data === "object") {
     const obj = data as Record<string, unknown>;
     if (typeof obj.detail === "string") return obj.detail;

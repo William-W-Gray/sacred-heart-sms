@@ -5,7 +5,7 @@ import {
   promotionsApi, financeApi, notificationsApi, usersApi,
   type CreateUserPayload,
 } from "@/lib/api/services";
-import type { Student } from "@/types";
+import type { Student, PromotionDecision } from "@/types";
 
 // ── Query key factory ────────────────────────────────────────────
 export const QK = {
@@ -216,7 +216,11 @@ export const usePromotions = (params?: Record<string, unknown>) =>
 export const useUpsertPromotion = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (d: Parameters<typeof promotionsApi.create>[0]) => promotionsApi.create(d),
+    // A student already has a decision for this academic year as soon as
+    // one's been saved once (unique_together on the backend) — POSTing
+    // again would always 400, so update in place when we have an id.
+    mutationFn: ({ id, ...d }: Partial<PromotionDecision>) =>
+      id ? promotionsApi.update(id, d) : promotionsApi.create(d),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["promotions"] }),
   });
 };

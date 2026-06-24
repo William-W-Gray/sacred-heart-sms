@@ -147,6 +147,33 @@ class StudentViewSet(viewsets.ModelViewSet):
             return [permissions.IsAuthenticated(), IsAdminUser()]
         return [permissions.IsAuthenticated()]
 
+    def perform_destroy(self, instance):
+        # Every FK from marks/attendance/conduct/finance to Student is
+        # on_delete=CASCADE, so a hard delete here silently destroys a
+        # student's entire academic AND financial history with no way back.
+        # The model already has a status field (withdrawn/transferred/
+        # graduated) built for this — push admins there instead of letting
+        # them nuke real records via what looks like routine cleanup.
+        blockers = []
+        if instance.invoices.exists():
+            blockers.append("financial invoices/payments")
+        if instance.marks.exists():
+            blockers.append("marks")
+        if instance.attendance_records.exists():
+            blockers.append("attendance records")
+        if instance.conduct_ratings.exists():
+            blockers.append("conduct ratings")
+        if instance.promotions.exists():
+            blockers.append("promotion decisions")
+        if blockers:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError(
+                f"Can't delete {instance.full_name} — they have existing {', '.join(blockers)} "
+                f"that would be permanently lost. Set their status to Withdrawn, Transferred, or "
+                f"Graduated instead, or remove those records first if this was a mistaken entry."
+            )
+        super().perform_destroy(instance)
+
     @action(detail=True, methods=["get"])
     def report_card(self, request, pk=None):
         """Full data payload consumed by the report-card generator."""

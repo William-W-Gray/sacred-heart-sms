@@ -398,7 +398,12 @@ class UserViewSet(viewsets.ModelViewSet):
         return UserSerializer
 
     def get_permissions(self):
-        if self.action in ["create", "list", "retrieve", "destroy", "partial_update", "update"]:
+        # self.action is the view method name ("reset_password"), not the
+        # url_path kwarg ("reset-password") — easy to typo-miss, and missing
+        # it here means any authenticated user could force-set a password
+        # (their own, since get_queryset still scopes non-admins to
+        # themselves) without the old-password check change_password enforces.
+        if self.action in ["create", "list", "retrieve", "destroy", "partial_update", "update", "reset_password"]:
             return [permissions.IsAuthenticated(), IsAdminUser()]
         return super().get_permissions()
 

@@ -4,6 +4,7 @@ import { Save } from "lucide-react";
 import { useStudents, usePromotions, useUpsertPromotion, useClasses } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
 import { QueryError } from "@/components/shared/QueryError";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { PromotionDecisionType } from "@/types";
 
 const DECISION_OPTIONS: { value: PromotionDecisionType; label: string }[] = [
@@ -55,6 +56,7 @@ export default function PromotionPage() {
   const handleSave = async () => {
     if (!selClass) { toast({ title: "Select a class first", variant: "error" }); return; }
     let saved = 0;
+    const failures: string[] = [];
     for (const student of studs) {
       const decision = getDecision(student.id);
       if (!decision) continue;
@@ -68,11 +70,21 @@ export default function PromotionPage() {
           reason: getNote(student.id),
         });
         saved++;
-      } catch { /* continue for others */ }
+      } catch (err) {
+        failures.push(`${student.full_name} (${getApiErrorMessage(err, "failed to save")})`);
+      }
     }
     setDecisions({});
     setNotes({});
-    toast({ title: `${saved} promotion decisions saved`, variant: "success" });
+    if (failures.length > 0) {
+      const preview = failures.slice(0, 3).join("; ");
+      toast({
+        title: `${saved} saved, ${failures.length} failed — ${preview}${failures.length > 3 ? `, +${failures.length - 3} more` : ""}`,
+        variant: "error",
+      });
+    } else {
+      toast({ title: `${saved} promotion decisions saved`, variant: "success" });
+    }
   };
 
   return (
