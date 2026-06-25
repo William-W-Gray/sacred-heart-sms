@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { useTeachers, useDeleteTeacher, useSubjects } from "@/hooks/useApi";
+import { useAuthStore } from "@/store/auth.store";
 import { TeacherModal } from "@/components/forms/TeacherModal";
 import { useToast } from "@/components/ui/toaster";
 import { QueryError } from "@/components/shared/QueryError";
@@ -12,6 +13,11 @@ export default function TeachersPage() {
   const [modalOpen, setModalOpen]   = useState(false);
   const [editTeacher, setEdit]      = useState<Teacher | null>(null);
   const { toast } = useToast();
+  const { role } = useAuthStore();
+  // Teachers can view this directory (TeacherViewSet has no row-level
+  // scoping), but only admin can create/edit/delete — TeacherViewSet.
+  // get_permissions() is admin-only for those actions.
+  const canEdit = role === "admin";
 
   const { data, isLoading, isError, refetch } = useTeachers({ page_size: 100 });
   const { data: subjects }  = useSubjects();
@@ -35,9 +41,11 @@ export default function TeachersPage() {
             <h1 className="text-2xl font-semibold text-navy font-serif">Teaching Staff</h1>
             <p className="text-sm text-[#5A6A8A] mt-0.5">{data?.count ?? 0} active teachers</p>
           </div>
-          <button onClick={() => { setEdit(null); setModalOpen(true); }} className="btn-gold flex items-center gap-2">
-            <Plus size={15} /> Add Teacher
-          </button>
+          {canEdit && (
+            <button onClick={() => { setEdit(null); setModalOpen(true); }} className="btn-gold flex items-center gap-2">
+              <Plus size={15} /> Add Teacher
+            </button>
+          )}
         </div>
       </div>
 
@@ -85,10 +93,14 @@ export default function TeachersPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex gap-1">
-                          <button onClick={() => { setEdit(t); setModalOpen(true); }} className="p-1.5 rounded hover:bg-[var(--surface2)] text-[#5A6A8A] hover:text-navy transition-colors"><Pencil size={14} /></button>
-                          <button onClick={() => handleDelete(t)} className="p-1.5 rounded hover:bg-[var(--err-bg)] text-[#5A6A8A] hover:text-[var(--err)] transition-colors"><Trash2 size={14} /></button>
-                        </div>
+                        {canEdit ? (
+                          <div className="flex gap-1">
+                            <button onClick={() => { setEdit(t); setModalOpen(true); }} className="p-1.5 rounded hover:bg-[var(--surface2)] text-[#5A6A8A] hover:text-navy transition-colors"><Pencil size={14} /></button>
+                            <button onClick={() => handleDelete(t)} className="p-1.5 rounded hover:bg-[var(--err-bg)] text-[#5A6A8A] hover:text-[var(--err)] transition-colors"><Trash2 size={14} /></button>
+                          </div>
+                        ) : (
+                          <span className="text-[#8A9ABB] text-xs">—</span>
+                        )}
                       </td>
                     </tr>
                   ))}

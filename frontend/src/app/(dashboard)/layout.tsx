@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   LayoutDashboard, GraduationCap, Users, UserCheck,
   CalendarDays, BarChart2, Star, Trophy, FileText,
-  CreditCard, School, Settings, Bell, LogOut, ChevronRight,
+  CreditCard, School, Settings, Bell, LogOut, ChevronRight, ChevronLeft,
   Menu, X, UserCog, Trash2, Archive,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
@@ -30,7 +30,10 @@ const NAV: NavSection[] = [
     { href: "/attendance",  icon: CalendarDays, label: "Attendance" },
     { href: "/marks",       icon: BarChart2,    label: "Marks Entry" },
     { href: "/conduct",     icon: Star,         label: "Conduct" },
-    { href: "/promotion",   icon: Trophy,       label: "Promotion" },
+    // Promotion decisions are admin-only at the API (PromotionDecisionViewSet
+    // .get_permissions()) — teachers reaching this page couldn't save
+    // anything anyway, so don't show them a page that only half-works.
+    { href: "/promotion",   icon: Trophy,       label: "Promotion", roles: ["admin"] },
   ]},
   { label: "Reports", items: [
     { href: "/report-cards", icon: FileText, label: "Report Cards" },
@@ -53,6 +56,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { user, role, isAuthenticated, logout, fetchMe, hasHydrated } = useAuthStore();
   const { data: notifData } = useNotifications();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Desktop-only icons-only mode (mobile always shows the full drawer when
+  // open — collapsing it there wouldn't save anything, the drawer is
+  // already hidden by default). Read synchronously so there's no flash of
+  // the wrong width on first paint.
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("sms-sidebar-collapsed") === "true";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("sms-sidebar-collapsed", String(collapsed));
+  }, [collapsed]);
 
   const unreadCount = notifData?.results?.filter((n) => !n.is_read).length ?? 0;
 
@@ -146,18 +161,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* ── SIDEBAR ──────────────────────────────────────────────── */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-60 flex-shrink-0 bg-[#FAFAF8] border-r border-[var(--border)] flex flex-col overflow-y-auto transition-transform duration-200 ease-in-out",
+          "fixed inset-y-0 left-0 z-40 w-60 flex-shrink-0 bg-[#FAFAF8] border-r border-[var(--border)] flex flex-col overflow-y-auto transition-[width,transform] duration-200 ease-in-out",
           "lg:static lg:translate-x-0",
+          collapsed ? "lg:w-[72px]" : "lg:w-60",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         {/* Brand */}
-        <div className="px-5 py-5 border-b border-[var(--border)] flex items-center justify-between">
+        <div className={cn("px-5 py-5 border-b border-[var(--border)] flex items-center justify-between", collapsed && "lg:px-0 lg:justify-center")}>
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#C8A84B] to-[#8B6F2A] flex items-center justify-center shadow-[0_2px_8px_rgba(200,168,75,0.4)] flex-shrink-0">
               <span className="text-navy-deep font-bold text-base font-serif">SH</span>
             </div>
-            <div>
+            <div className={cn(collapsed && "lg:hidden")}>
               <p className="text-xs font-bold text-navy tracking-tight leading-tight">Sacred Heart</p>
               <p className="text-[10px] text-[var(--muted)] leading-tight font-medium">Catholic High School · SMS</p>
             </div>
@@ -171,11 +187,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
         </div>
 
+        {/* Collapse toggle (desktop only) */}
+        <button
+          onClick={() => setCollapsed((c) => !c)}
+          className="hidden lg:flex items-center justify-center w-full py-2 border-b border-[var(--border)] text-[var(--muted)] hover:bg-[var(--surface)] hover:text-navy transition-colors"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+        </button>
+
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-5">
           {NAV.filter((s) => !s.roles || (role && s.roles.includes(role as UserRole))).map((section) => (
             <div key={section.label}>
-              <p className="text-[11px] font-semibold tracking-widest text-[var(--muted)] uppercase px-2 mb-1.5">
+              <p className={cn("text-[11px] font-semibold tracking-widest text-[var(--muted)] uppercase px-2 mb-1.5", collapsed && "lg:hidden")}>
                 {section.label}
               </p>
               <div className="space-y-0.5">
@@ -187,15 +213,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     <Link
                       key={item.href}
                       href={item.href}
+                      title={item.label}
                       className={cn(
                         "flex items-center gap-2.5 py-2.5 rounded-lg text-sm transition-all duration-150",
                         active
                           ? "bg-gradient-to-r from-navy to-navy-light text-white font-medium shadow-sm border-l-2 border-[var(--gold)] pl-[9px] pr-2.5"
                           : "text-[#5A6A8A] hover:bg-white hover:text-navy hover:shadow-[var(--shadow-xs)] px-2.5",
+                        collapsed && "lg:justify-center lg:px-0 lg:border-l-0",
                       )}
                     >
-                      <item.icon size={15} className={active ? "text-[var(--gold)]" : "text-[var(--muted)]"} />
-                      {item.label}
+                      <item.icon size={15} className={cn("flex-shrink-0", active ? "text-[var(--gold)]" : "text-[var(--muted)]")} />
+                      <span className={cn(collapsed && "lg:hidden")}>{item.label}</span>
                     </Link>
                   );
                 })}
@@ -207,13 +235,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Footer */}
         <div className="p-4 border-t border-[var(--border)] space-y-2">
           {/* User identity */}
-          <div className="flex items-center gap-2.5 px-2 py-2">
+          <div className={cn("flex items-center gap-2.5 px-2 py-2", collapsed && "lg:justify-center lg:px-0")} title={`${user.email}${user.first_name ? ` (${user.first_name} ${user.last_name})` : ""}`}>
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#C8A84B] to-[#8B6F2A] flex items-center justify-center text-navy-deep font-bold text-xs flex-shrink-0">
               {user.first_name && user.last_name
                 ? `${user.first_name[0]}${user.last_name[0]}`.toUpperCase()
                 : user.email.slice(0, 2).toUpperCase()}
             </div>
-            <div className="flex-1 min-w-0">
+            <div className={cn("flex-1 min-w-0", collapsed && "lg:hidden")}>
               <p className="text-xs font-semibold text-navy truncate">
                 {user.first_name ? `${user.first_name} ${user.last_name}`.trim() : user.email}
               </p>
@@ -221,17 +249,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           </div>
           {/* Academic year */}
-          <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[var(--gold-pale)] border border-[rgba(200,168,75,0.2)]">
+          <div className={cn("flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[var(--gold-pale)] border border-[rgba(200,168,75,0.2)]", collapsed && "lg:justify-center lg:px-0")} title="2025/2026 · Semester 2">
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold)] flex-shrink-0" />
-            <span className="text-[11px] font-semibold text-[var(--gold-dim)]">2025/2026 · Semester 2</span>
+            <span className={cn("text-[11px] font-semibold text-[var(--gold-dim)]", collapsed && "lg:hidden")}>2025/2026 · Semester 2</span>
           </div>
           {/* Sign out */}
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-medium text-[var(--muted)] hover:bg-white hover:text-navy rounded-lg transition-all group"
+            title="Sign out"
+            className={cn("w-full flex items-center gap-2 px-2.5 py-2 text-xs font-medium text-[var(--muted)] hover:bg-white hover:text-navy rounded-lg transition-all group", collapsed && "lg:justify-center lg:px-0")}
           >
-            <LogOut size={13} className="group-hover:text-[var(--err)] transition-colors" />
-            Sign out
+            <LogOut size={13} className="group-hover:text-[var(--err)] transition-colors flex-shrink-0" />
+            <span className={cn(collapsed && "lg:hidden")}>Sign out</span>
           </button>
         </div>
       </aside>

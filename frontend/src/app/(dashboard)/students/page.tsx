@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Plus, Search, Pencil, Trash2, FileText } from "lucide-react";
 import Image from "next/image";
 import { useStudents, useDeleteStudent, useClasses } from "@/hooks/useApi";
+import { useAuthStore } from "@/store/auth.store";
 import { StudentModal } from "@/components/forms/StudentModal";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { GradeCell } from "@/components/shared/GradeCell";
@@ -19,6 +20,12 @@ export default function StudentsPage() {
   const [modalOpen, setModalOpen]   = useState(false);
   const [editStudent, setEditStudent] = useState<Student | null>(null);
   const { toast } = useToast();
+  const { role } = useAuthStore();
+  // Only admin can create/edit/delete students — StudentViewSet.get_permissions()
+  // is admin-only for those actions, so teachers/finance_officers reaching
+  // this page (to view their classes/students) shouldn't see buttons that
+  // will only 403.
+  const canEdit = role === "admin";
 
   const { data, isLoading, isError, refetch } = useStudents({
     search: search || undefined,
@@ -55,9 +62,11 @@ export default function StudentsPage() {
             <h1 className="text-2xl font-semibold text-navy font-serif">Student Registry</h1>
             <p className="text-sm text-[#5A6A8A] mt-0.5">{totalCount} enrolled students · 2025/2026</p>
           </div>
-          <button onClick={openAdd} className="btn-gold flex items-center gap-2">
-            <Plus size={15} /> Enrol Student
-          </button>
+          {canEdit && (
+            <button onClick={openAdd} className="btn-gold flex items-center gap-2">
+              <Plus size={15} /> Enrol Student
+            </button>
+          )}
         </div>
 
         {/* Filters */}
@@ -96,10 +105,12 @@ export default function StudentsPage() {
             <div className="flex flex-col items-center justify-center h-64 text-[#8A9ABB]">
               <div className="text-4xl mb-3">🎓</div>
               <p className="font-medium">No students found</p>
-              <p className="text-sm mt-1">Adjust your search or enrol a new student</p>
-              <button onClick={openAdd} className="btn-gold mt-4 flex items-center gap-2">
-                <Plus size={14} /> Enrol Student
-              </button>
+              <p className="text-sm mt-1">Adjust your search{canEdit ? " or enrol a new student" : ""}</p>
+              {canEdit && (
+                <button onClick={openAdd} className="btn-gold mt-4 flex items-center gap-2">
+                  <Plus size={14} /> Enrol Student
+                </button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -152,20 +163,24 @@ export default function StudentsPage() {
                           >
                             <FileText size={14} />
                           </Link>
-                          <button
-                            onClick={() => openEdit(student)}
-                            className="p-1.5 rounded hover:bg-[var(--surface2)] text-[#5A6A8A] hover:text-navy transition-colors"
-                            title="Edit"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(student)}
-                            className="p-1.5 rounded hover:bg-[var(--err-bg)] text-[#5A6A8A] hover:text-[var(--err)] transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {canEdit && (
+                            <>
+                              <button
+                                onClick={() => openEdit(student)}
+                                className="p-1.5 rounded hover:bg-[var(--surface2)] text-[#5A6A8A] hover:text-navy transition-colors"
+                                title="Edit"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(student)}
+                                className="p-1.5 rounded hover:bg-[var(--err-bg)] text-[#5A6A8A] hover:text-[var(--err)] transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
