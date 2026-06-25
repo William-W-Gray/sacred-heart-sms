@@ -227,17 +227,35 @@ export const trashApi = {
 };
 
 // ── Snapshots (admin-only data backups) ───────────────────────────
+export type SnapshotType = "manual" | "system" | "pre_update" | "pre_delete";
+export type SnapshotStatus = "completed" | "failed";
+export type SnapshotModule =
+  | "users" | "students" | "staff" | "classes" | "subjects"
+  | "attendance" | "grades" | "finance" | "settings";
+
 export interface Snapshot {
   id: number;
-  label: string;
+  name: string;
+  description: string;
+  snapshot_type: SnapshotType;
+  included_modules: SnapshotModule[];
+  status: SnapshotStatus;
+  error_message: string;
   file: string;
   size_bytes: number;
+  record_count: number;
   created_by_email: string | null;
-  record_count: number | null;
   created_at: string;
+}
+export interface CreateSnapshotPayload {
+  name: string;
+  description?: string;
+  snapshot_type: SnapshotType;
+  included_modules: SnapshotModule[];
+  confirm: boolean;
 }
 export const snapshotsApi = {
   list:   (p?: Record<string, unknown>) => list<Snapshot>("/api/snapshots/", p),
-  create: (label?: string) => create<Snapshot>("/api/snapshots/", { label: label ?? "" }),
+  create: (payload: CreateSnapshotPayload) => create<Snapshot>("/api/snapshots/", payload),
   delete: (id: number) => del(`/api/snapshots/${id}/`),
 };

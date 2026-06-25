@@ -1,10 +1,17 @@
 "use client";
 import { useState } from "react";
-import { Archive, Download, Trash2, Plus } from "lucide-react";
-import { useSnapshots, useCreateSnapshot, useDeleteSnapshot } from "@/hooks/useApi";
+import { Archive, Download, Trash2, Plus, Eye, CheckCircle2, XCircle } from "lucide-react";
+import { useSnapshots, useDeleteSnapshot } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
 import { QueryError } from "@/components/shared/QueryError";
 import { getApiErrorMessage } from "@/lib/utils/errors";
+import { SnapshotModal } from "@/components/forms/SnapshotModal";
+import { SnapshotDetailModal } from "@/components/forms/SnapshotDetailModal";
+import type { Snapshot } from "@/lib/api/services";
+
+const TYPE_LABELS: Record<string, string> = {
+  manual: "Manual", system: "System", pre_update: "Pre-Update", pre_delete: "Pre-Delete",
+};
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -14,29 +21,19 @@ function formatBytes(bytes: number): string {
 
 export default function SnapshotsPage() {
   const { toast } = useToast();
-  const [label, setLabel] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [detailSnapshot, setDetailSnapshot] = useState<Snapshot | null>(null);
 
   const { data, isLoading, isError, refetch } = useSnapshots();
-  const createSnapshot = useCreateSnapshot();
   const deleteSnapshot = useDeleteSnapshot();
 
   const snapshots = data?.results ?? [];
 
-  const handleCreate = async () => {
-    try {
-      await createSnapshot.mutateAsync(label.trim() || undefined);
-      setLabel("");
-      toast({ title: "Snapshot created", variant: "success" });
-    } catch (err) {
-      toast({ title: getApiErrorMessage(err, "Failed to create snapshot"), variant: "error" });
-    }
-  };
-
   const handleDelete = async (id: number, name: string) => {
-    if (!confirm(`Delete snapshot "${name}"? This cannot be undone.`)) return;
+    if (!confirm(`Delete snapshot "${name}"? It will move to Trash and can be restored within 7 days, or permanently deleted from there.`)) return;
     try {
       await deleteSnapshot.mutateAsync(id);
-      toast({ title: "Snapshot deleted", variant: "success" });
+      toast({ title: "Snapshot moved to Trash", variant: "success" });
     } catch (err) {
       toast({ title: getApiErrorMessage(err, "Failed to delete snapshot"), variant: "error" });
     }
@@ -49,25 +46,11 @@ export default function SnapshotsPage() {
           <div>
             <h1 className="text-2xl font-semibold text-navy font-serif">Snapshots</h1>
             <p className="text-sm text-[var(--muted)] mt-0.5">
-              On-demand exports of students, teachers, marks, attendance, and finance data.
+              On-demand exports of the selected school data, downloadable any time.
             </p>
           </div>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-2 mt-4">
-          <input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="Optional label, e.g. Before semester 2 close-out"
-            className="form-input w-full sm:w-80 text-sm"
-          />
-          <button
-            onClick={handleCreate}
-            disabled={createSnapshot.isPending}
-            className="btn-gold flex items-center gap-2 disabled:opacity-60 justify-center"
-          >
-            <Plus size={15} />
-            {createSnapshot.isPending ? "Creating…" : "Create Snapshot"}
+          <button onClick={() => setCreateOpen(true)} className="btn-gold flex items-center gap-2 self-start sm:self-auto">
+            <Plus size={15} /> Create Snapshot
           </button>
         </div>
       </div>
@@ -86,14 +69,17 @@ export default function SnapshotsPage() {
           <div className="card flex flex-col items-center justify-center h-48 text-[var(--muted)]">
             <Archive size={28} className="mb-2 opacity-40" />
             <p className="text-sm">No snapshots yet</p>
+            <button onClick={() => setCreateOpen(true)} className="btn-gold mt-4 flex items-center gap-2">
+              <Plus size={14} /> Create your first snapshot
+            </button>
           </div>
         ) : (
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse min-w-[700px]">
+              <table className="w-full text-sm border-collapse min-w-[800px]">
                 <thead className="bg-[var(--surface)]">
                   <tr>
-                    {["Label", "Records", "Size", "Created By", "Created At", "Actions"].map((h) => (
+                    {["Name", "Type", "Status", "Records", "Size", "Created By", "Created At", "Actions"].map((h) => (
                       <th key={h} className="text-left px-4 py-3 text-[11px] font-semibold text-[var(--muted)] uppercase tracking-wider border-b border-[var(--border)]">{h}</th>
                     ))}
                   </tr>
@@ -101,8 +87,15 @@ export default function SnapshotsPage() {
                 <tbody>
                   {snapshots.map((s) => (
                     <tr key={s.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface)] transition-colors">
-                      <td className="px-4 py-3 font-medium text-navy">{s.label || `Snapshot #${s.id}`}</td>
-                      <td className="px-4 py-3 text-xs text-[var(--muted)] font-mono">{s.record_count ?? "—"}</td>
+                      <td className="px-4 py-3 font-medium text-navy max-w-[220px] truncate" title={s.name}>{s.name}</td>
+                      <td className="px-4 py-3 text-xs text-[var(--muted)]">{TYPE_LABELS[s.snapshot_type] ?? s.snapshot_type}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center gap-1 text-xs font-medium ${s.status === "completed" ? "text-[var(--ok)]" : "text-[var(--err)]"}`}>
+                          {s.status === "completed" ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
+                          {s.status === "completed" ? "Completed" : "Failed"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-[var(--muted)] font-mono">{s.record_count.toLocaleString()}</td>
                       <td className="px-4 py-3 text-xs text-[var(--muted)] font-mono">{formatBytes(s.size_bytes)}</td>
                       <td className="px-4 py-3 text-xs text-[var(--muted)]">{s.created_by_email ?? "—"}</td>
                       <td className="px-4 py-3 text-xs text-[var(--muted)] font-mono">
@@ -110,17 +103,26 @@ export default function SnapshotsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
-                          <a
-                            href={s.file}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-1.5 rounded hover:bg-navy-pale text-navy transition-colors"
-                            title="Download"
-                          >
-                            <Download size={14} />
-                          </a>
                           <button
-                            onClick={() => handleDelete(s.id, s.label || `Snapshot #${s.id}`)}
+                            onClick={() => setDetailSnapshot(s)}
+                            className="p-1.5 rounded hover:bg-[var(--surface2)] text-[#5A6A8A] hover:text-navy transition-colors"
+                            title="View details"
+                          >
+                            <Eye size={14} />
+                          </button>
+                          {s.file && (
+                            <a
+                              href={s.file}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 rounded hover:bg-navy-pale text-navy transition-colors"
+                              title="Download"
+                            >
+                              <Download size={14} />
+                            </a>
+                          )}
+                          <button
+                            onClick={() => handleDelete(s.id, s.name)}
                             disabled={deleteSnapshot.isPending}
                             className="p-1.5 rounded hover:bg-[var(--err-bg)] text-[var(--muted)] hover:text-[var(--err)] transition-colors disabled:opacity-50"
                             title="Delete"
@@ -137,6 +139,9 @@ export default function SnapshotsPage() {
           </div>
         )}
       </div>
+
+      <SnapshotModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      <SnapshotDetailModal snapshot={detailSnapshot} onClose={() => setDetailSnapshot(null)} />
     </>
   );
 }

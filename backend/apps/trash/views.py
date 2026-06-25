@@ -24,8 +24,12 @@ def _purge_expired() -> int:
     cutoff = timezone.now() - timedelta(days=RETENTION_DAYS)
     purged = 0
     for _slug, model_cls, _display_name, _label_field in registry.iter_registry():
-        deleted, _ = model_cls.all_objects.filter(deleted_at__lt=cutoff).delete()
-        purged += deleted
+        # Per-instance .delete(), not a bulk queryset .delete() — some
+        # models (e.g. Snapshot) override .delete() to clean up side effects
+        # like a stored file, and a bulk queryset delete bypasses that.
+        for obj in list(model_cls.all_objects.filter(deleted_at__lt=cutoff)):
+            obj.delete()
+            purged += 1
     return purged
 
 

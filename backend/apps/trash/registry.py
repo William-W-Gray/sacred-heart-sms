@@ -26,6 +26,7 @@ TRASH_MODELS = [
     ("promotion_decision",   "marks",     "PromotionDecision",  "Promotion decisions",   "__str__"),
     ("invoice",              "finance",   "Invoice",            "Invoices",              "invoice_number"),
     ("payment",              "finance",   "Payment",            "Payments",              "__str__"),
+    ("snapshot",             "snapshots", "Snapshot",           "Snapshots",             "name"),
 ]
 
 

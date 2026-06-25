@@ -373,8 +373,11 @@ export const useSnapshots = () =>
 export const useCreateSnapshot = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (label?: string) => snapshotsApi.create(label),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["snapshots"] }),
+    mutationFn: (payload: Parameters<typeof snapshotsApi.create>[0]) => snapshotsApi.create(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["snapshots"] });
+      qc.invalidateQueries({ queryKey: ["trash"] });
+    },
   });
 };
 
@@ -382,6 +385,9 @@ export const useDeleteSnapshot = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => snapshotsApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["snapshots"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["snapshots"] });
+      qc.invalidateQueries({ queryKey: ["trash"] });
+    },
   });
 };
