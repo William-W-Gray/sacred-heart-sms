@@ -207,3 +207,37 @@ export const notificationsApi = {
   markRead:   (id: number) => api.post(`/api/notifications/${id}/read/`),
   markAllRead: () => api.post("/api/notifications/read-all/"),
 };
+
+// ── Trash (admin-only soft-delete recovery) ───────────────────────
+export interface TrashItem {
+  type: string;
+  type_label: string;
+  id: number;
+  label: string;
+  deleted_at: string;
+  deleted_by: string | null;
+  expires_at: string;
+  days_remaining: number;
+}
+export const trashApi = {
+  list:    (p?: { type?: string }) =>
+    api.get<{ count: number; retention_days: number; results: TrashItem[] }>("/api/trash/", { params: p }).then((r) => r.data),
+  restore: (type: string, id: number) => api.post(`/api/trash/${type}/${id}/restore/`).then((r) => r.data),
+  purge:   (type: string, id: number) => del(`/api/trash/${type}/${id}/`),
+};
+
+// ── Snapshots (admin-only data backups) ───────────────────────────
+export interface Snapshot {
+  id: number;
+  label: string;
+  file: string;
+  size_bytes: number;
+  created_by_email: string | null;
+  record_count: number | null;
+  created_at: string;
+}
+export const snapshotsApi = {
+  list:   (p?: Record<string, unknown>) => list<Snapshot>("/api/snapshots/", p),
+  create: (label?: string) => create<Snapshot>("/api/snapshots/", { label: label ?? "" }),
+  delete: (id: number) => del(`/api/snapshots/${id}/`),
+};

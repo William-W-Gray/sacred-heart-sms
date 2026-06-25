@@ -8,6 +8,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from .models import Mark, GradingScale, ConductCategory, ConductRating, PromotionDecision
 from apps.students.models import Student
 from apps.users.views import IsAdminUser, IsAdminOrTeacher, scope_to_own_student
+from apps.trash.mixins import SoftDeleteViewSetMixin
 
 
 class GradingScaleSerializer(serializers.ModelSerializer):
@@ -69,10 +70,26 @@ class PromotionDecisionSerializer(serializers.ModelSerializer):
     def get_student_name(self, obj) -> str:
         return obj.student.full_name
 
+    def create(self, validated_data):
+        # all_objects: a decision for this (student, academic_year) may
+        # already exist but be trashed — restore and update it instead of
+        # trying to create a duplicate, which would 400 on unique_together.
+        existing = PromotionDecision.all_objects.filter(
+            student=validated_data.get("student"),
+            academic_year=validated_data.get("academic_year"),
+        ).first()
+        if existing and existing.deleted_at:
+            existing.restore()
+            for attr, value in validated_data.items():
+                setattr(existing, attr, value)
+            existing.save()
+            return existing
+        return super().create(validated_data)
+
 
 # ── ViewSets ─────────────────────────────────────────────────────
 
-class GradingScaleViewSet(viewsets.ModelViewSet):
+class GradingScaleViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset           = GradingScale.objects.all()
     serializer_class   = GradingScaleSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -85,7 +102,7 @@ class GradingScaleViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
 
-class MarkViewSet(viewsets.ModelViewSet):
+class MarkViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset = Mark.objects.select_related(
         "student", "subject", "semester", "recorded_by"
     ).all()
@@ -157,11 +174,16 @@ class MarkViewSet(viewsets.ModelViewSet):
                     if (class_id_cache[student_id], subject_id) not in allowed_pairs:
                         continue  # teacher not assigned to this class/subject
 
-                instance = Mark.objects.filter(
+                # all_objects: a matching mark may exist but be trashed —
+                # restore it instead of trying to create a duplicate, which
+                # would 400 on the unique_together.
+                instance = Mark.all_objects.filter(
                     student_id=student_id, subject_id=subject_id, semester_id=semester_id,
                 ).first()
                 if instance and instance.is_locked:
                     continue  # never overwrite a locked mark
+                if instance and instance.deleted_at:
+                    instance.restore()
 
                 data = {
                     "student":    student_id,
@@ -186,7 +208,7 @@ class MarkViewSet(viewsets.ModelViewSet):
         return Response({"created": created, "updated": updated})
 
 
-class ConductCategoryViewSet(viewsets.ModelViewSet):
+class ConductCategoryViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset           = ConductCategory.objects.all()
     serializer_class   = ConductCategorySerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -197,7 +219,7 @@ class ConductCategoryViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
 
-class ConductRatingViewSet(viewsets.ModelViewSet):
+class ConductRatingViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset = ConductRating.objects.select_related(
         "student", "category", "semester", "rated_by"
     ).all()
@@ -267,9 +289,14 @@ class ConductRatingViewSet(viewsets.ModelViewSet):
                     if class_id_cache[student_id] not in allowed_class_ids:
                         continue  # teacher not assigned to this class
 
-                instance = ConductRating.objects.filter(
+                # all_objects: a matching rating may exist but be trashed —
+                # restore it instead of trying to create a duplicate, which
+                # would 400 on the unique_together.
+                instance = ConductRating.all_objects.filter(
                     student_id=student_id, category_id=category_id, semester_id=semester_id,
                 ).first()
+                if instance and instance.deleted_at:
+                    instance.restore()
 
                 data = {
                     "student":  student_id,
@@ -292,7 +319,7 @@ class ConductRatingViewSet(viewsets.ModelViewSet):
         return Response(ConductRatingSerializer(results, many=True).data)
 
 
-class PromotionDecisionViewSet(viewsets.ModelViewSet):
+class PromotionDecisionViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset = PromotionDecision.objects.select_related(
         "student", "academic_year", "current_class", "next_class"
     ).all()

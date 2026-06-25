@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   studentsApi, guardiansApi, teachersApi, classesApi, subjectsApi,
   academicYearsApi, semestersApi, attendanceApi, marksApi, conductApi,
-  promotionsApi, financeApi, notificationsApi, usersApi,
+  promotionsApi, financeApi, notificationsApi, usersApi, trashApi, snapshotsApi,
   type CreateUserPayload,
 } from "@/lib/api/services";
 import type { Student, PromotionDecision } from "@/types";
@@ -30,6 +30,8 @@ export const QK = {
   invoices:    (p?: object) => ["invoices", p] as const,
   payments:    (p?: object) => ["payments", p] as const,
   notifications: ()         => ["notifications"] as const,
+  trash:       (p?: object) => ["trash", p] as const,
+  snapshots:   (p?: object) => ["snapshots", p] as const,
 };
 
 // ── Students ─────────────────────────────────────────────────────
@@ -65,7 +67,10 @@ export const useDeleteStudent = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => studentsApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["students"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["students"] });
+      qc.invalidateQueries({ queryKey: ["trash"] });
+    },
   });
 };
 
@@ -93,7 +98,10 @@ export const useDeleteTeacher = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: teachersApi.delete,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["teachers"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["teachers"] });
+      qc.invalidateQueries({ queryKey: ["trash"] });
+    },
   });
 };
 
@@ -118,7 +126,10 @@ export const useDeleteGuardian = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => guardiansApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["guardians"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["guardians"] });
+      qc.invalidateQueries({ queryKey: ["trash"] });
+    },
   });
 };
 
@@ -164,7 +175,13 @@ export const useCreateSubject = () => {
 
 export const useDeleteSubject = () => {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: subjectsApi.delete, onSuccess: () => qc.invalidateQueries({ queryKey: ["subjects"] }) });
+  return useMutation({
+    mutationFn: subjectsApi.delete,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subjects"] });
+      qc.invalidateQueries({ queryKey: ["trash"] });
+    },
+  });
 };
 
 // ── Marks ────────────────────────────────────────────────────────
@@ -252,7 +269,10 @@ export const useDeleteInvoice = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: financeApi.invoices.delete,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["trash"] });
+    },
   });
 };
 
@@ -297,7 +317,10 @@ export const useDeleteUser = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => usersApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["users"] });
+      qc.invalidateQueries({ queryKey: ["trash"] });
+    },
   });
 };
 
@@ -306,3 +329,59 @@ export const useResetUserPassword = () =>
     mutationFn: ({ id, password }: { id: number; password: string }) =>
       usersApi.adminResetPassword(id, password),
   });
+
+// ── Trash (admin-only) ────────────────────────────────────────────
+export const useTrash = (params?: { type?: string }) =>
+  useQuery({ queryKey: QK.trash(params), queryFn: () => trashApi.list(params) });
+
+export const useRestoreFromTrash = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ type, id }: { type: string; id: number }) => trashApi.restore(type, id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["trash"] });
+      // The restored record could be any of these — cheap to invalidate
+      // them all rather than track exactly which one per type.
+      qc.invalidateQueries({ queryKey: ["students"] });
+      qc.invalidateQueries({ queryKey: ["teachers"] });
+      qc.invalidateQueries({ queryKey: ["guardians"] });
+      qc.invalidateQueries({ queryKey: ["users"] });
+      qc.invalidateQueries({ queryKey: ["classes"] });
+      qc.invalidateQueries({ queryKey: ["subjects"] });
+      qc.invalidateQueries({ queryKey: ["marks"] });
+      qc.invalidateQueries({ queryKey: ["attendance"] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
+      qc.invalidateQueries({ queryKey: ["promotions"] });
+      qc.invalidateQueries({ queryKey: ["conduct-ratings"] });
+    },
+  });
+};
+
+export const usePurgeFromTrash = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ type, id }: { type: string; id: number }) => trashApi.purge(type, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["trash"] }),
+  });
+};
+
+// ── Snapshots (admin-only) ────────────────────────────────────────
+export const useSnapshots = () =>
+  useQuery({ queryKey: QK.snapshots(), queryFn: () => snapshotsApi.list() });
+
+export const useCreateSnapshot = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (label?: string) => snapshotsApi.create(label),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["snapshots"] }),
+  });
+};
+
+export const useDeleteSnapshot = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => snapshotsApi.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["snapshots"] }),
+  });
+};

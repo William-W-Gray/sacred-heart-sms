@@ -2,8 +2,16 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from django.db import models
 from django.utils import timezone
 
+from apps.trash.models import SoftDeleteModel, SoftDeleteQuerySet
+
 
 class UserManager(BaseUserManager):
+    def get_queryset(self):
+        # Soft-deleted users can't be looked up here — including by the
+        # auth backend / JWT auth, both of which go through this manager,
+        # so a trashed account's existing tokens stop validating immediately.
+        return SoftDeleteQuerySet(self.model, using=self._db).filter(deleted_at__isnull=True)
+
     def create_user(self, email: str, password: str = None, **extra_fields):
         if not email:
             raise ValueError("Email is required")
@@ -20,7 +28,7 @@ class UserManager(BaseUserManager):
         return self.create_user(email, password, **extra_fields)
 
 
-class User(AbstractBaseUser, PermissionsMixin):
+class User(AbstractBaseUser, PermissionsMixin, SoftDeleteModel):
     class Role(models.TextChoices):
         ADMIN           = "admin",           "Administrator"
         FINANCE_OFFICER = "finance_officer", "Finance Officer"
@@ -59,6 +67,23 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def has_role(self, *roles) -> bool:
         return self.role in roles
+
+    def get_cascade_objects(self):
+        # Whichever profile is attached cascades its own soft_delete()/
+        # restore(), which in turn cascades to *its* dependents (e.g. a
+        # Student's marks/attendance/invoices) — see each profile's
+        # get_cascade_querysets().
+        profile = None
+        if self.role == self.Role.STUDENT:
+            from apps.students.models import Student
+            profile = Student.all_objects.filter(user=self).first()
+        elif self.role == self.Role.TEACHER:
+            from apps.teachers.models import Teacher
+            profile = Teacher.all_objects.filter(user=self).first()
+        elif self.role == self.Role.GUARDIAN:
+            from apps.students.models import Guardian
+            profile = Guardian.all_objects.filter(user=self).first()
+        return [profile] if profile else []
 
     class Meta:
         verbose_name = "User"

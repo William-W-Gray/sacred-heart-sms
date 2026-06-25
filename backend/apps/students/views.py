@@ -6,6 +6,7 @@ from django.db import transaction
 
 from .models import Student, Guardian, StudentGuardian, Class, Subject, AcademicYear, Semester
 from apps.users.views import IsAdminUser
+from apps.trash.mixins import SoftDeleteViewSetMixin
 
 
 # ── Academic year / semester ────────────────────────────────────
@@ -111,7 +112,7 @@ class StudentDetailSerializer(serializers.ModelSerializer):
 
 
 # ── ViewSets ────────────────────────────────────────────────────
-class StudentViewSet(viewsets.ModelViewSet):
+class StudentViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset = Student.objects.select_related("current_class").all()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["status", "gender", "current_class"]
@@ -147,32 +148,10 @@ class StudentViewSet(viewsets.ModelViewSet):
             return [permissions.IsAuthenticated(), IsAdminUser()]
         return [permissions.IsAuthenticated()]
 
-    def perform_destroy(self, instance):
-        # Every FK from marks/attendance/conduct/finance to Student is
-        # on_delete=CASCADE, so a hard delete here silently destroys a
-        # student's entire academic AND financial history with no way back.
-        # The model already has a status field (withdrawn/transferred/
-        # graduated) built for this — push admins there instead of letting
-        # them nuke real records via what looks like routine cleanup.
-        blockers = []
-        if instance.invoices.exists():
-            blockers.append("financial invoices/payments")
-        if instance.marks.exists():
-            blockers.append("marks")
-        if instance.attendance_records.exists():
-            blockers.append("attendance records")
-        if instance.conduct_ratings.exists():
-            blockers.append("conduct ratings")
-        if instance.promotions.exists():
-            blockers.append("promotion decisions")
-        if blockers:
-            from rest_framework.exceptions import ValidationError
-            raise ValidationError(
-                f"Can't delete {instance.full_name} — they have existing {', '.join(blockers)} "
-                f"that would be permanently lost. Set their status to Withdrawn, Transferred, or "
-                f"Graduated instead, or remove those records first if this was a mistaken entry."
-            )
-        super().perform_destroy(instance)
+    # perform_destroy comes from SoftDeleteViewSetMixin: DELETE now moves the
+    # student (and, per Student.get_cascade_querysets, their marks/
+    # attendance/conduct/invoices/payments/promotions) to Trash instead of
+    # cascading a permanent delete — recoverable for 7 days from /api/trash/.
 
     @action(detail=True, methods=["get"])
     def report_card(self, request, pk=None):
@@ -185,7 +164,7 @@ class StudentViewSet(viewsets.ModelViewSet):
         return Response(build_report_card_data(student, year))
 
 
-class GuardianViewSet(viewsets.ModelViewSet):
+class GuardianViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset           = Guardian.objects.all()
     serializer_class   = GuardianSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -240,7 +219,7 @@ class GuardianViewSet(viewsets.ModelViewSet):
         return Response({"linked": created_count})
 
 
-class ClassViewSet(viewsets.ModelViewSet):
+class ClassViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset           = Class.objects.select_related("class_teacher", "academic_year").all()
     serializer_class   = ClassSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -277,7 +256,7 @@ class ClassViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
 
-class SubjectViewSet(viewsets.ModelViewSet):
+class SubjectViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset           = Subject.objects.all()
     serializer_class   = SubjectSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -312,7 +291,7 @@ class SubjectViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
 
-class AcademicYearViewSet(viewsets.ModelViewSet):
+class AcademicYearViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset           = AcademicYear.objects.all()
     serializer_class   = AcademicYearSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -323,7 +302,7 @@ class AcademicYearViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
 
-class SemesterViewSet(viewsets.ModelViewSet):
+class SemesterViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset           = Semester.objects.select_related("academic_year").all()
     serializer_class   = SemesterSerializer
     permission_classes = [permissions.IsAuthenticated]

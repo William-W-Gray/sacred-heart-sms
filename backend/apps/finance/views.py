@@ -6,6 +6,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import Invoice, Payment, Receipt
 from apps.users.views import IsAdminUser, IsAdminOrFinanceOfficer, scope_to_own_student
+from apps.trash.mixins import SoftDeleteViewSetMixin
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -57,7 +58,7 @@ class ReceiptSerializer(serializers.ModelSerializer):
         fields = ["id", "payment", "receipt_number", "pdf_file", "generated_at"]
 
 
-class InvoiceViewSet(viewsets.ModelViewSet):
+class InvoiceViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset = Invoice.objects.select_related("student", "semester").prefetch_related("payments").all()
     serializer_class   = InvoiceSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -77,7 +78,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
 
-class PaymentViewSet(viewsets.ModelViewSet):
+class PaymentViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset = Payment.objects.select_related("invoice", "received_by").all()
     serializer_class   = PaymentSerializer
     permission_classes = [permissions.IsAuthenticated]

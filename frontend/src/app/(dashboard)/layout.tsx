@@ -6,7 +6,7 @@ import {
   LayoutDashboard, GraduationCap, Users, UserCheck,
   CalendarDays, BarChart2, Star, Trophy, FileText,
   CreditCard, School, Settings, Bell, LogOut, ChevronRight,
-  Menu, X, UserCog,
+  Menu, X, UserCog, Trash2, Archive,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { useNotifications } from "@/hooks/useApi";
@@ -39,9 +39,11 @@ const NAV: NavSection[] = [
     { href: "/finance", icon: CreditCard, label: "Finance" },
   ]},
   { label: "Admin", roles: ["admin"], items: [
-    { href: "/users",    icon: UserCog, label: "User Management" },
-    { href: "/classes",  icon: School,  label: "Classes & Subjects" },
-    { href: "/settings", icon: Settings, label: "Settings" },
+    { href: "/users",     icon: UserCog,  label: "User Management" },
+    { href: "/classes",   icon: School,   label: "Classes & Subjects" },
+    { href: "/trash",     icon: Trash2,   label: "Trash" },
+    { href: "/snapshots", icon: Archive,  label: "Snapshots" },
+    { href: "/settings",  icon: Settings, label: "Settings" },
   ]},
 ];
 

@@ -3,6 +3,27 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import Teacher, TeacherAssignment
 from apps.users.views import IsAdminUser
+from apps.trash.mixins import SoftDeleteViewSetMixin
+
+
+def _upsert_assignment(teacher, cls, subject_id, academic_year, is_active=True):
+    # all_objects: a matching assignment may exist but be trashed (e.g. it
+    # was removed and is being added back) — restore it instead of trying
+    # to create a duplicate, which would 400 on the unique_together.
+    existing = TeacherAssignment.all_objects.filter(
+        teacher=teacher, assigned_class=cls, subject_id=subject_id, academic_year=academic_year,
+    ).first()
+    if existing:
+        if existing.deleted_at:
+            existing.restore()
+        if not existing.is_active:
+            existing.is_active = True
+            existing.save(update_fields=["is_active"])
+    else:
+        TeacherAssignment.objects.create(
+            teacher=teacher, assigned_class=cls, subject_id=subject_id,
+            academic_year=academic_year, is_active=is_active,
+        )
 
 
 class TeacherSerializer(serializers.ModelSerializer):
@@ -39,7 +60,8 @@ class TeacherSerializer(serializers.ModelSerializer):
     def validate_email(self, value):
         if value:
             from apps.users.models import User
-            qs = User.objects.filter(email=value)
+            # all_objects: still physically unique even for a trashed row.
+            qs = User.all_objects.filter(email=value)
             if self.instance and self.instance.user:
                 qs = qs.exclude(id=self.instance.user.id)
             if qs.exists():
@@ -48,7 +70,7 @@ class TeacherSerializer(serializers.ModelSerializer):
 
     def validate_employee_id(self, value):
         if value:
-            qs = Teacher.objects.filter(employee_id=value)
+            qs = Teacher.all_objects.filter(employee_id=value)
             if self.instance:
                 qs = qs.exclude(id=self.instance.id)
             if qs.exists():
@@ -88,7 +110,7 @@ class TeacherSerializer(serializers.ModelSerializer):
             if not employee_id:
                 while True:
                     employee_id = f"EMP-{random.randint(1000, 9999)}"
-                    if not Teacher.objects.filter(employee_id=employee_id).exists():
+                    if not Teacher.all_objects.filter(employee_id=employee_id).exists():
                         break
                 validated_data["employee_id"] = employee_id
 
@@ -107,13 +129,7 @@ class TeacherSerializer(serializers.ModelSerializer):
                 if active_year and classes:
                     for cls in classes:
                         for sub_id in subjects_data:
-                            TeacherAssignment.objects.get_or_create(
-                                teacher=teacher,
-                                assigned_class=cls,
-                                subject_id=sub_id,
-                                academic_year=active_year,
-                                defaults={"is_active": True}
-                            )
+                            _upsert_assignment(teacher, cls, sub_id, active_year)
 
             return teacher
 
@@ -145,7 +161,12 @@ class TeacherSerializer(serializers.ModelSerializer):
 
                 active_year = AcademicYear.objects.filter(is_current=True).first()
                 if active_year:
-                    TeacherAssignment.objects.filter(teacher=teacher, academic_year=active_year).delete()
+                    # all_objects + hard delete: this recomputes "this
+                    # teacher's current assignments" from scratch — not a
+                    # user deleting one they care about recovering. Soft-
+                    # deleting here would just clutter Trash and immediately
+                    # collide with the recreated rows below.
+                    TeacherAssignment.all_objects.filter(teacher=teacher, academic_year=active_year).delete()
 
                     classes = list(teacher.homeroom_class.all())
                     for cls in classes:
@@ -181,7 +202,7 @@ class TeacherAssignmentSerializer(serializers.ModelSerializer):
         return str(obj.assigned_class)
 
 
-class TeacherViewSet(viewsets.ModelViewSet):
+class TeacherViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset           = Teacher.objects.select_related("user").all()
     serializer_class   = TeacherSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -223,7 +244,7 @@ class TeacherViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
 
-class TeacherAssignmentViewSet(viewsets.ModelViewSet):
+class TeacherAssignmentViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset = TeacherAssignment.objects.select_related(
         "teacher", "assigned_class", "subject", "academic_year"
     ).all()

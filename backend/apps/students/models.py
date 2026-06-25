@@ -1,8 +1,9 @@
 from django.db import models
 from apps.users.models import User
+from apps.trash.models import SoftDeleteModel
 
 
-class AcademicYear(models.Model):
+class AcademicYear(SoftDeleteModel):
     name       = models.CharField(max_length=20, unique=True)   # "2025/2026"
     start_date = models.DateField()
     end_date   = models.DateField()
@@ -20,7 +21,7 @@ class AcademicYear(models.Model):
         return self.name
 
 
-class Semester(models.Model):
+class Semester(SoftDeleteModel):
     class Number(models.IntegerChoices):
         FIRST  = 1, "Semester 1"
         SECOND = 2, "Semester 2"
@@ -39,7 +40,7 @@ class Semester(models.Model):
         return f"{self.academic_year} – Semester {self.number}"
 
 
-class Subject(models.Model):
+class Subject(SoftDeleteModel):
     """Configurable by admin — never hardcoded."""
     name       = models.CharField(max_length=100, unique=True)
     code       = models.CharField(max_length=20, unique=True)
@@ -52,7 +53,7 @@ class Subject(models.Model):
         return self.name
 
 
-class Class(models.Model):
+class Class(SoftDeleteModel):
     """e.g. Grade 12A, 9C"""
     name          = models.CharField(max_length=10)            # "12A"
     grade         = models.IntegerField()
@@ -71,7 +72,7 @@ class Class(models.Model):
         return f"Grade {self.name}"
 
 
-class Guardian(models.Model):
+class Guardian(SoftDeleteModel):
     user         = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True, related_name="guardian_profile")
     full_name    = models.CharField(max_length=200)
     phone_number = models.CharField(max_length=30)
@@ -84,7 +85,7 @@ class Guardian(models.Model):
         return self.full_name
 
 
-class Student(models.Model):
+class Student(SoftDeleteModel):
     class Status(models.TextChoices):
         ACTIVE      = "active",      "Active"
         SUSPENDED   = "suspended",   "Suspended"
@@ -124,6 +125,19 @@ class Student(models.Model):
 
     def __str__(self) -> str:
         return f"{self.full_name} ({self.student_id})"
+
+    def get_cascade_querysets(self):
+        from apps.marks.models import Mark, ConductRating, PromotionDecision
+        from apps.attendance.models import AttendanceRecord
+        from apps.finance.models import Invoice, Payment
+        return [
+            (Mark,             {"student": self}),
+            (AttendanceRecord, {"student": self}),
+            (ConductRating,    {"student": self}),
+            (PromotionDecision, {"student": self}),
+            (Invoice,          {"student": self}),
+            (Payment,          {"invoice__student": self}),
+        ]
 
 
 class StudentGuardian(models.Model):

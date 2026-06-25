@@ -8,6 +8,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from .models import AttendanceRecord, AttendanceSummary
 from apps.students.models import Student
 from apps.users.views import IsAdminOrTeacher, scope_to_own_student
+from apps.trash.mixins import SoftDeleteViewSetMixin
 
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
@@ -41,7 +42,7 @@ class AttendanceSummarySerializer(serializers.ModelSerializer):
         return obj.student.full_name
 
 
-class AttendanceRecordViewSet(viewsets.ModelViewSet):
+class AttendanceRecordViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset = AttendanceRecord.objects.select_related(
         "student", "subject", "class_group", "recorded_by"
     ).all()
@@ -113,9 +114,15 @@ class AttendanceRecordViewSet(viewsets.ModelViewSet):
                     if (class_id_cache[student_id], subject_id) not in allowed_pairs:
                         continue  # teacher not assigned to this class/subject
 
-                instance = AttendanceRecord.objects.filter(
+                # all_objects: a matching record may exist but be trashed
+                # (e.g. it was deleted and is being re-entered) — restore it
+                # instead of trying to create a duplicate, which would 400
+                # on the unique_together.
+                instance = AttendanceRecord.all_objects.filter(
                     student_id=student_id, subject_id=subject_id, date=date,
                 ).first()
+                if instance and instance.deleted_at:
+                    instance.restore()
 
                 data = {
                     "student":     student_id,

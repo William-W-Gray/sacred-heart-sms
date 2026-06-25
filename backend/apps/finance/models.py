@@ -4,9 +4,10 @@ from django.db import models
 from django.core.validators import MinValueValidator
 from django.utils import timezone
 from apps.students.models import Student, Semester
+from apps.trash.models import SoftDeleteModel
 
 
-class Invoice(models.Model):
+class Invoice(SoftDeleteModel):
     class Status(models.TextChoices):
         PENDING   = "pending",   "Pending"
         PARTIAL   = "partial",   "Partially Paid"
@@ -65,7 +66,12 @@ class Invoice(models.Model):
     def generate_number(cls) -> str:
         from datetime import date
         year = date.today().year
-        last = cls.objects.filter(invoice_number__startswith=f"INV-{year}-").order_by("-invoice_number").first()
+        # all_objects, not objects: a trashed invoice's number is still
+        # physically unique in the DB, so a sequence based on the filtered
+        # manager could regenerate the same number every retry and never
+        # succeed (unlike the random employee_id/student_id generators,
+        # this one is deterministic — it won't pick something else next time).
+        last = cls.all_objects.filter(invoice_number__startswith=f"INV-{year}-").order_by("-invoice_number").first()
         seq  = 1
         if last:
             try:
@@ -74,8 +80,11 @@ class Invoice(models.Model):
                 pass
         return f"INV-{year}-{seq:04d}"
 
+    def get_cascade_querysets(self):
+        return [(Payment, {"invoice": self})]
 
-class Payment(models.Model):
+
+class Payment(SoftDeleteModel):
     class Method(models.TextChoices):
         CASH          = "cash",          "Cash"
         BANK_TRANSFER = "bank_transfer", "Bank Transfer"

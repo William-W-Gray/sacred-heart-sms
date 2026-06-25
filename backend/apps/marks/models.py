@@ -1,9 +1,10 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from apps.students.models import Student, Subject, Semester, AcademicYear, Class
+from apps.trash.models import SoftDeleteModel
 
 
-class GradingScale(models.Model):
+class GradingScale(SoftDeleteModel):
     """Never hardcode grade logic — store and look up from here."""
     academic_year = models.ForeignKey(AcademicYear, on_delete=models.CASCADE, related_name="grading_scales")
     grade_letter  = models.CharField(max_length=2)    # A, B, C, D, F
@@ -29,7 +30,7 @@ class GradingScale(models.Model):
         return f"{self.grade_letter} ({self.min_score}–{self.max_score})"
 
 
-class Mark(models.Model):
+class Mark(SoftDeleteModel):
     """Test + exam score per student per subject per semester."""
     student     = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="marks")
     subject     = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name="marks")
@@ -76,7 +77,7 @@ class StudentRanking(models.Model):
         unique_together = ("student", "academic_year", "semester")
 
 
-class ConductCategory(models.Model):
+class ConductCategory(SoftDeleteModel):
     name      = models.CharField(max_length=100, unique=True)
     sort_order = models.IntegerField(default=0)
     is_active = models.BooleanField(default=True)
@@ -88,7 +89,7 @@ class ConductCategory(models.Model):
         return self.name
 
 
-class ConductRating(models.Model):
+class ConductRating(SoftDeleteModel):
     student   = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="conduct_ratings")
     category  = models.ForeignKey(ConductCategory, on_delete=models.CASCADE)
     semester  = models.ForeignKey(Semester, on_delete=models.CASCADE)
@@ -104,7 +105,7 @@ class ConductRating(models.Model):
         return f"{self.student} – {self.category}: {self.rating}/6"
 
 
-class PromotionDecision(models.Model):
+class PromotionDecision(SoftDeleteModel):
     class Decision(models.TextChoices):
         PROMOTED      = "promoted",      "Promoted"
         CONDITIONED   = "conditioned",   "Conditioned"

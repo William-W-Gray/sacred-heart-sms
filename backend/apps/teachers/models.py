@@ -1,9 +1,10 @@
 from django.db import models
 from apps.users.models import User
 from apps.students.models import Class, Subject, AcademicYear
+from apps.trash.models import SoftDeleteModel
 
 
-class Teacher(models.Model):
+class Teacher(SoftDeleteModel):
     user        = models.OneToOneField(User, on_delete=models.CASCADE, related_name="teacher_profile")
     full_name   = models.CharField(max_length=200)
     email       = models.EmailField(unique=True)
@@ -25,8 +26,11 @@ class Teacher(models.Model):
             is_active=True,
         ).exists()
 
+    def get_cascade_querysets(self):
+        return [(TeacherAssignment, {"teacher": self})]
 
-class TeacherAssignment(models.Model):
+
+class TeacherAssignment(SoftDeleteModel):
     """
     One subject → one teacher per class per academic year.
     One teacher can cover multiple subjects / classes.

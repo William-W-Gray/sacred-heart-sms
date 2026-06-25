@@ -25,6 +25,8 @@ INSTALLED_APPS = [
     "corsheaders",
     "django_filters",
     # Internal apps
+    "apps.trash",
+    "apps.snapshots",
     "apps.users",
     "apps.students",
     "apps.teachers",

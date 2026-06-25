@@ -1,9 +1,10 @@
 from django.db import models
 from django.core.validators import MinValueValidator
 from apps.students.models import Student, Subject, Class, Semester
+from apps.trash.models import SoftDeleteModel
 
 
-class AttendanceRecord(models.Model):
+class AttendanceRecord(SoftDeleteModel):
     class Status(models.TextChoices):
         PRESENT = "present", "Present"
         LATE    = "late",    "Late"

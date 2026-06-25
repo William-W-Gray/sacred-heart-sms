@@ -5,6 +5,7 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from apps.trash.mixins import SoftDeleteViewSetMixin
 from .models import User, Notification
 
 
@@ -98,7 +99,11 @@ class UserSerializer(serializers.ModelSerializer):
     def validate_student_id(self, value):
         if value:
             from apps.students.models import Student
-            qs = Student.objects.filter(student_id=value)
+            # all_objects, not objects: the value is still physically
+            # unique in the DB even for a trashed row, so this needs to
+            # catch a collision with one too (clean 400 here beats a raw
+            # IntegrityError surfacing later).
+            qs = Student.all_objects.filter(student_id=value)
             if self.instance:
                 qs = qs.exclude(user=self.instance)
             if qs.exists():
@@ -108,7 +113,7 @@ class UserSerializer(serializers.ModelSerializer):
     def validate_employee_id(self, value):
         if value:
             from apps.teachers.models import Teacher
-            qs = Teacher.objects.filter(employee_id=value)
+            qs = Teacher.all_objects.filter(employee_id=value)
             if self.instance:
                 qs = qs.exclude(user=self.instance)
             if qs.exists():
@@ -238,10 +243,20 @@ class UserCreateSerializer(serializers.ModelSerializer):
             "address", "occupation", "guardian_id", "relationship", "student_id_link", "class_ids"
         ]
 
+    def validate_email(self, value):
+        # DRF's auto-added UniqueValidator for this field only checks
+        # User.objects (the filtered manager), so it would miss a
+        # collision with a trashed account's still-unique email.
+        if User.all_objects.filter(email=value).exists():
+            raise serializers.ValidationError(
+                "A user with this email already exists. If it belongs to a trashed account, restore it from Trash instead."
+            )
+        return value
+
     def validate_student_id(self, value):
         if value:
             from apps.students.models import Student
-            qs = Student.objects.filter(student_id=value)
+            qs = Student.all_objects.filter(student_id=value)
             if qs.exists():
                 raise serializers.ValidationError("A student with this Student ID already exists.")
         return value
@@ -249,7 +264,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
     def validate_employee_id(self, value):
         if value:
             from apps.teachers.models import Teacher
-            qs = Teacher.objects.filter(employee_id=value)
+            qs = Teacher.all_objects.filter(employee_id=value)
             if qs.exists():
                 raise serializers.ValidationError("A teacher with this Employee ID already exists.")
         return value
@@ -287,9 +302,13 @@ class UserCreateSerializer(serializers.ModelSerializer):
                 from apps.students.models import Student, Class, Guardian, StudentGuardian
                 if not student_id:
                     import random
+                    from django.utils import timezone
+                    year = timezone.now().year
                     while True:
-                        student_id = f"CHS-2026-{random.randint(1000, 9999)}"
-                        if not Student.objects.filter(student_id=student_id).exists():
+                        student_id = f"CHS-{year}-{random.randint(1000, 9999)}"
+                        # all_objects: a trashed student's id is still
+                        # physically unique in the DB.
+                        if not Student.all_objects.filter(student_id=student_id).exists():
                             break
 
                 student = Student.objects.create(
@@ -319,7 +338,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
                     import random
                     while True:
                         employee_id = f"EMP-{random.randint(1000, 9999)}"
-                        if not Teacher.objects.filter(employee_id=employee_id).exists():
+                        if not Teacher.all_objects.filter(employee_id=employee_id).exists():
                             break
 
                 teacher = Teacher.objects.create(
@@ -381,7 +400,7 @@ class NotificationSerializer(serializers.ModelSerializer):
 
 
 # ── ViewSets ────────────────────────────────────────────────────
-class UserViewSet(viewsets.ModelViewSet):
+class UserViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset = User.objects.all().order_by("email")
     permission_classes = [permissions.IsAuthenticated]
 

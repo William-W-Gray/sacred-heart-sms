@@ -28,8 +28,8 @@ class Command(BaseCommand):
             self.stdout.write("DJANGO_ADMIN_EMAIL/DJANGO_ADMIN_PASSWORD not set, skipping admin creation")
             return
 
-        if User.objects.filter(email__iexact=email).exists():
-            self.stdout.write(f"User {email} already exists, skipping")
+        if User.all_objects.filter(email__iexact=email).exists():
+            self.stdout.write(f"User {email} already exists (active or trashed), skipping")
             return
 
         User.objects.create_superuser(email=email, password=password)
