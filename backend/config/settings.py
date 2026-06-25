@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     "apps.trash",
     "apps.snapshots",
     "apps.audit",
+    "apps.school",
     "apps.users",
     "apps.students",
     "apps.teachers",

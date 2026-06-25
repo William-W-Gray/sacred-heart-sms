@@ -21,6 +21,7 @@ TRASH_MODELS = [
     ("attendance_record",    "attendance","AttendanceRecord",   "Attendance records",    "__str__"),
     ("mark",                 "marks",     "Mark",               "Marks",                 "__str__"),
     ("grading_scale",        "marks",     "GradingScale",       "Grading scales",        "__str__"),
+    ("assessment_template",  "marks",     "AssessmentTemplate", "Grading templates",     "__str__"),
     ("conduct_category",     "marks",     "ConductCategory",    "Conduct categories",    "name"),
     ("conduct_rating",       "marks",     "ConductRating",      "Conduct ratings",       "__str__"),
     ("promotion_decision",   "marks",     "PromotionDecision",  "Promotion decisions",   "__str__"),

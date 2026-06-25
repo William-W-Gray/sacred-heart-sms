@@ -299,3 +299,76 @@ export const auditApi = {
   list: (p?: AuditLogParams) => list<AuditLog>("/api/audit-logs/", p as Record<string, unknown>),
   meta: () => one<AuditLogMeta>("/api/audit-logs/meta/"),
 };
+
+// ── Grading / assessment templates (admin-defined) ───────────────
+export type AssessmentKind = "assignment" | "quiz" | "test" | "exam";
+export interface AssessmentTemplate {
+  id: number;
+  name: string;
+  kind: AssessmentKind;
+  kind_display: string;
+  academic_year: number;
+  semester: number | null;
+  class_group: number | null;
+  class_name: string | null;
+  subject: number | null;
+  subject_name: string | null;
+  max_score: number;
+  weight: number;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+export const assessmentTemplatesApi = {
+  list:   (p?: Record<string, unknown>) => list<AssessmentTemplate>("/api/assessment-templates/", p),
+  create: (d: Partial<AssessmentTemplate>) => create<AssessmentTemplate>("/api/assessment-templates/", d),
+  update: (id: number, d: Partial<AssessmentTemplate>) => update<AssessmentTemplate>(`/api/assessment-templates/${id}/`, d),
+  delete: (id: number) => del(`/api/assessment-templates/${id}/`),
+};
+
+// ── Report card template (singleton settings) ────────────────────
+export interface ReportCardTemplate {
+  id: number;
+  header_line: string;
+  show_logo: boolean;
+  show_motto: boolean;
+  show_conduct: boolean;
+  show_attendance: boolean;
+  show_finance_balance: boolean;
+  show_grading_scale: boolean;
+  teacher_comment_label: string;
+  principal_comment_label: string;
+  principal_signature: string;
+  footer_text: string;
+  updated_at: string;
+  updated_by: number | null;
+  updated_by_name: string | null;
+}
+export const reportCardTemplateApi = {
+  get: () => api.get<ReportCardTemplate>("/api/report-card-template/").then((r) => r.data),
+  update: (d: Partial<ReportCardTemplate>) =>
+    api.patch<ReportCardTemplate>("/api/report-card-template/", d).then((r) => r.data),
+};
+
+// ── School profile (singleton settings) ──────────────────────────
+export interface SchoolProfile {
+  id: number;
+  school_name: string;
+  logo: string | null;
+  address: string;
+  phone: string;
+  email: string;
+  motto: string;
+  principal_name: string;
+  updated_at: string;
+  updated_by: number | null;
+  updated_by_name: string | null;
+}
+export const schoolApi = {
+  get: () => api.get<SchoolProfile>("/api/school-profile/").then((r) => r.data),
+  update: (d: FormData | Partial<SchoolProfile>) =>
+    api.patch<SchoolProfile>("/api/school-profile/", d, {
+      headers: d instanceof FormData ? { "Content-Type": "multipart/form-data" } : {},
+    }).then((r) => r.data),
+};

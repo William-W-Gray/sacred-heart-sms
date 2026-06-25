@@ -30,6 +30,50 @@ class GradingScale(SoftDeleteModel):
         return f"{self.grade_letter} ({self.min_score}–{self.max_score})"
 
 
+class AssessmentTemplate(SoftDeleteModel):
+    """Admin-defined assessment component (e.g. "Quiz 1", "Mid-Term Test") with a
+    weight and max score, optionally scoped to a class/subject/semester.
+
+    This is a *configuration* layer: it documents the school's grading structure
+    and drives max-score validation in the marks-entry UI. It deliberately does
+    NOT change how `Mark` stores scores (still test + exam) or how
+    `marks/services.py` computes averages — keeping the fragile grade pipeline
+    untouched. A null class/subject/semester means "applies to all".
+    """
+    class Kind(models.TextChoices):
+        ASSIGNMENT = "assignment", "Assignment / Homework"
+        QUIZ       = "quiz",       "Quiz"
+        TEST       = "test",       "Test"
+        EXAM       = "exam",       "Exam"
+
+    name          = models.CharField(max_length=100)
+    kind          = models.CharField(max_length=20, choices=Kind.choices, default=Kind.TEST)
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.CASCADE, related_name="assessment_templates")
+    semester      = models.ForeignKey(Semester, on_delete=models.CASCADE, null=True, blank=True, related_name="assessment_templates")
+    class_group   = models.ForeignKey(Class, on_delete=models.CASCADE, null=True, blank=True, related_name="assessment_templates")
+    subject       = models.ForeignKey(Subject, on_delete=models.CASCADE, null=True, blank=True, related_name="assessment_templates")
+    max_score     = models.DecimalField(
+        max_digits=6, decimal_places=2, default=100,
+        validators=[MinValueValidator(0)],
+    )
+    weight        = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Contribution to the subject total, as a percentage.",
+    )
+    is_active     = models.BooleanField(default=True)
+    sort_order    = models.IntegerField(default=0)
+    created_at    = models.DateTimeField(auto_now_add=True)
+    updated_at    = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "kind", "name"]
+
+    def __str__(self) -> str:
+        scope = self.subject.name if self.subject else "All subjects"
+        return f"{self.name} · {self.get_kind_display()} · {scope}"
+
+
 class Mark(SoftDeleteModel):
     """Test + exam score per student per subject per semester."""
     student     = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="marks")

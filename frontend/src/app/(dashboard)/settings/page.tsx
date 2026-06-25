@@ -1,11 +1,14 @@
 "use client";
-import { useState } from "react";
-import { Save } from "lucide-react";
-import { useAcademicYears, useGradingScales } from "@/hooks/useApi";
+import { useState, useEffect, useRef, type ChangeEvent } from "react";
+import { Save, Upload } from "lucide-react";
+import Image from "next/image";
+import { useAcademicYears, useGradingScales, useSchoolProfile, useUpdateSchoolProfile } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
 import { QueryError } from "@/components/shared/QueryError";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { marksApi } from "@/lib/api/services";
+import { GradingTemplatesSection } from "@/components/settings/GradingTemplatesSection";
+import { ReportCardTemplateSection } from "@/components/settings/ReportCardTemplateSection";
 
 const GRADE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   A: { bg: "bg-[var(--ok-bg)]",   border: "border-[var(--ok-border)]",   text: "text-[var(--ok)]" },
@@ -21,17 +24,78 @@ export default function SettingsPage() {
   const { data: scaleData, isError: scalesError, refetch: refetchScales } = useGradingScales();
   const scales = scaleData?.results ?? [];
 
-  const [schoolName, setSchoolName]   = useState("Sacred Heart Catholic High School");
-  const [location,   setLocation]     = useState("Monrovia, Liberia");
-  const [motto,      setMotto]        = useState("Ora et Labora");
-  const [phone,      setPhone]        = useState("+231 770 123 456");
-  const [email,      setEmail]        = useState("sacredheart@edu.lr");
+  const { data: school, isError: schoolError, isLoading: schoolLoading, refetch: refetchSchool } = useSchoolProfile();
+  const updateSchool = useUpdateSchoolProfile();
+
+  // Editable copy of the persisted school profile. Re-seeded whenever the
+  // server record loads/changes so the form reflects saved values on refresh.
+  const [form, setForm] = useState({
+    school_name: "", address: "", motto: "", phone: "", email: "", principal_name: "",
+  });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (school) {
+      setForm({
+        school_name:    school.school_name    ?? "",
+        address:        school.address        ?? "",
+        motto:          school.motto          ?? "",
+        phone:          school.phone          ?? "",
+        email:          school.email          ?? "",
+        principal_name: school.principal_name ?? "",
+      });
+    }
+  }, [school]);
+
+  const setField = (k: keyof typeof form, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
   const [scaleDrafts, setScaleDraft]  = useState<Record<number, { min?: number; max?: number; description?: string }>>({});
   const [savingScale, setSavingScale] = useState(false);
 
-  const handleSaveSchool = () => {
-    toast({ title: "School settings saved", variant: "success" });
+  const handleLogoPick = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Logo must be an image file", variant: "error" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Logo must be under 5MB", variant: "error" });
+      return;
+    }
+    setLogoFile(file);
+  };
+
+  const handleSaveSchool = async () => {
+    if (!form.school_name.trim()) {
+      toast({ title: "School name is required", variant: "error" });
+      return;
+    }
+    // Critical change — the school name shows on every report card & dashboard.
+    if (school && form.school_name.trim() !== school.school_name) {
+      const ok = window.confirm(
+        `Change the school name from "${school.school_name}" to "${form.school_name.trim()}"?\n\n` +
+        "This name appears on report cards, dashboards and printed documents.",
+      );
+      if (!ok) return;
+    }
+    try {
+      let payload: FormData | Record<string, string>;
+      if (logoFile) {
+        const fd = new FormData();
+        Object.entries(form).forEach(([k, v]) => fd.append(k, v));
+        fd.append("logo", logoFile);
+        payload = fd;
+      } else {
+        payload = { ...form };
+      }
+      await updateSchool.mutateAsync(payload);
+      setLogoFile(null);
+      toast({ title: "School profile saved", variant: "success" });
+    } catch (err) {
+      toast({ title: getApiErrorMessage(err, "Failed to save school profile"), variant: "error" });
+    }
   };
 
   const handleSaveScale = async () => {
@@ -75,35 +139,74 @@ export default function SettingsPage() {
           {/* School info */}
           <div className="card p-6">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-sm font-semibold text-navy">School Information</h3>
-              <button onClick={handleSaveSchool} className="btn-gold flex items-center gap-1.5 text-xs px-3 py-1.5">
-                <Save size={13} /> Save
+              <h3 className="text-sm font-semibold text-navy">School Profile</h3>
+              <button
+                onClick={handleSaveSchool}
+                disabled={updateSchool.isPending || schoolLoading}
+                className="btn-gold flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-60"
+              >
+                <Save size={13} /> {updateSchool.isPending ? "Saving…" : "Save"}
               </button>
             </div>
+
+            {schoolError ? (
+              <QueryError resource="school profile" onRetry={refetchSchool} />
+            ) : schoolLoading ? (
+              <p className="text-sm text-[#8A9ABB] py-6 text-center">Loading school profile…</p>
+            ) : (
             <div className="space-y-4">
-              <div>
-                <label className="form-label">School Name</label>
-                <input value={schoolName} onChange={(e) => setSchoolName(e.target.value)} className="form-input" />
+              {/* Logo */}
+              <div className="flex items-center gap-4">
+                <div className="h-16 w-16 rounded-lg border border-[var(--border)] bg-[var(--surface)] flex items-center justify-center overflow-hidden flex-shrink-0">
+                  {logoFile ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={URL.createObjectURL(logoFile)} alt="logo preview" className="h-full w-full object-contain" />
+                  ) : school?.logo ? (
+                    <Image src={school.logo} alt="school logo" width={64} height={64} className="object-contain" />
+                  ) : (
+                    <span className="text-[10px] text-[#8A9ABB] text-center px-1">No logo</span>
+                  )}
+                </div>
+                <div>
+                  <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoPick} className="hidden" />
+                  <button
+                    type="button"
+                    onClick={() => logoInputRef.current?.click()}
+                    className="btn-outline flex items-center gap-1.5 text-xs px-3 py-1.5"
+                  >
+                    <Upload size={13} /> {logoFile ? "Change logo" : "Upload logo"}
+                  </button>
+                  <p className="text-[11px] text-[#8A9ABB] mt-1">PNG/JPG, up to 5MB</p>
+                </div>
               </div>
               <div>
-                <label className="form-label">Location</label>
-                <input value={location} onChange={(e) => setLocation(e.target.value)} className="form-input" />
+                <label className="form-label">School Name</label>
+                <input value={form.school_name} onChange={(e) => setField("school_name", e.target.value)} className="form-input" />
+              </div>
+              <div>
+                <label className="form-label">Address</label>
+                <input value={form.address} onChange={(e) => setField("address", e.target.value)} className="form-input" />
               </div>
               <div>
                 <label className="form-label">School Motto</label>
-                <input value={motto} onChange={(e) => setMotto(e.target.value)} className="form-input" />
+                <input value={form.motto} onChange={(e) => setField("motto", e.target.value)} className="form-input" />
+              </div>
+              <div>
+                <label className="form-label">Principal Name</label>
+                <input value={form.principal_name} onChange={(e) => setField("principal_name", e.target.value)} className="form-input" />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="form-label">Phone</label>
-                  <input value={phone} onChange={(e) => setPhone(e.target.value)} className="form-input" />
+                  <input value={form.phone} onChange={(e) => setField("phone", e.target.value)} className="form-input" />
                 </div>
                 <div>
                   <label className="form-label">Email</label>
-                  <input value={email} onChange={(e) => setEmail(e.target.value)} className="form-input" />
+                  <input value={form.email} onChange={(e) => setField("email", e.target.value)} className="form-input" />
                 </div>
               </div>
             </div>
+            )}
           </div>
 
           {/* Grading scale */}
@@ -193,6 +296,12 @@ export default function SettingsPage() {
           </div>
           )}
         </div>
+
+        {/* Grading templates (admin-defined assessment setup) */}
+        <GradingTemplatesSection />
+
+        {/* Report card template editor */}
+        <ReportCardTemplateSection />
       </div>
     </>
   );

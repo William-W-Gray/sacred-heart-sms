@@ -5,7 +5,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
-from .models import Mark, GradingScale, ConductCategory, ConductRating, PromotionDecision
+from .models import Mark, GradingScale, AssessmentTemplate, ConductCategory, ConductRating, PromotionDecision
 from apps.students.models import Student
 from apps.users.views import IsAdminUser, IsAdminOrTeacher, scope_to_own_student
 from apps.trash.mixins import SoftDeleteViewSetMixin
@@ -18,6 +18,31 @@ class GradingScaleSerializer(serializers.ModelSerializer):
     class Meta:
         model  = GradingScale
         fields = "__all__"
+
+
+class AssessmentTemplateSerializer(serializers.ModelSerializer):
+    kind_display = serializers.CharField(source="get_kind_display", read_only=True)
+    subject_name = serializers.SerializerMethodField()
+    class_name   = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = AssessmentTemplate
+        fields = ["id", "name", "kind", "kind_display", "academic_year",
+                  "semester", "class_group", "class_name", "subject", "subject_name",
+                  "max_score", "weight", "is_active", "sort_order",
+                  "created_at", "updated_at"]
+        read_only_fields = ["created_at", "updated_at"]
+
+    def get_subject_name(self, obj) -> str | None:
+        return obj.subject.name if obj.subject else None
+
+    def get_class_name(self, obj) -> str | None:
+        return str(obj.class_group) if obj.class_group else None
+
+    def validate(self, attrs):
+        if attrs.get("max_score") is not None and attrs["max_score"] <= 0:
+            raise serializers.ValidationError({"max_score": "Max score must be greater than zero."})
+        return attrs
 
 
 class MarkSerializer(serializers.ModelSerializer):
@@ -100,6 +125,25 @@ class GradingScaleViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelV
     permission_classes = [permissions.IsAuthenticated]
     filter_backends    = [DjangoFilterBackend]
     filterset_fields   = ["academic_year"]
+
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [permissions.IsAuthenticated(), IsAdminUser()]
+        return [permissions.IsAuthenticated()]
+
+
+class AssessmentTemplateViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    """Admin-defined grading templates. World-readable (teachers need them at
+    marks-entry time), admin-gated for writes — same posture as GradingScale."""
+    audit_module = "Grading Template"
+    audit_create_action = audit_update_action = audit_delete_action = AuditAction.SETTINGS_CHANGE
+    queryset = AssessmentTemplate.objects.select_related(
+        "academic_year", "semester", "class_group", "subject"
+    ).all()
+    serializer_class   = AssessmentTemplateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends    = [DjangoFilterBackend]
+    filterset_fields   = ["academic_year", "semester", "class_group", "subject", "kind", "is_active"]
 
     def get_permissions(self):
         if self.action in ("create", "update", "partial_update", "destroy"):

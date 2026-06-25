@@ -1,9 +1,18 @@
 "use client";
 import { useState, useRef } from "react";
 import { Printer } from "lucide-react";
-import { useStudents, useReportCard } from "@/hooks/useApi";
+import { useStudents, useReportCard, useSchoolProfile, useReportCardTemplate, useGradingScales, useInvoices } from "@/hooks/useApi";
 import { QueryError } from "@/components/shared/QueryError";
 import type { ReportCard, ReportCardSubject } from "@/types";
+import type { SchoolProfile, ReportCardTemplate } from "@/lib/api/services";
+
+// Falls back to the historical Sacred Heart defaults when no profile is saved.
+const DEFAULT_SCHOOL = {
+  school_name: "Sacred Heart Catholic High School",
+  motto:       "Ora et Labora",
+  address:     "Monrovia, Liberia",
+  email:       "sacredheart@edu.lr",
+};
 
 const CONDUCT_CATEGORIES = [
   "Punctuality", "Classroom Conduct", "Homework", "General Neatness",
@@ -44,11 +53,30 @@ function SubjectRow({ sub }: { sub: ReportCardSubject }) {
   );
 }
 
-function ReportCardView({ data, teacherComment, principalComment }: {
+// Sensible defaults when no template row has been saved yet — everything on.
+const DEFAULT_TPL = {
+  header_line: "Republic of Liberia",
+  show_logo: true, show_motto: true, show_conduct: true, show_attendance: true,
+  show_finance_balance: false, show_grading_scale: true,
+  teacher_comment_label: "Class Teacher's Comment",
+  principal_comment_label: "Principal's Comment",
+  principal_signature: "", footer_text: "",
+};
+
+function ReportCardView({ data, teacherComment, principalComment, school, tpl, gradingScale, financeBalance }: {
   data: ReportCard;
   teacherComment: string;
   principalComment: string;
+  school?: SchoolProfile | null;
+  tpl?: ReportCardTemplate | null;
+  gradingScale?: { grade_letter: string; min_score: number; max_score: number; description: string }[];
+  financeBalance?: number | null;
 }) {
+  const t = tpl ?? DEFAULT_TPL;
+  const schoolName = school?.school_name || DEFAULT_SCHOOL.school_name;
+  const schoolMotto = school?.motto || DEFAULT_SCHOOL.motto;
+  const schoolAddr = school?.address || DEFAULT_SCHOOL.address;
+  const schoolEmail = school?.email || DEFAULT_SCHOOL.email;
   // Totals row
   const avgs = (data.subjects ?? []).map((s) => s.year_average).filter(Boolean) as number[];
   const overallAvg = avgs.length ? safeAvg(...avgs) : null;
@@ -59,9 +87,17 @@ function ReportCardView({ data, teacherComment, principalComment }: {
     <div id="rc-print" style={{ background: "#fff", border: "2px solid #1A2A4A", borderRadius: 4, maxWidth: 800, margin: "0 auto", fontFamily: "DM Sans, sans-serif" }}>
       {/* Header */}
       <div style={{ background: "#0D1A33", color: "#fff", textAlign: "center", padding: "18px 20px", borderBottom: "3px solid #C8A84B" }}>
-        <div style={{ fontSize: 10, letterSpacing: 2, opacity: 0.6, marginBottom: 4, textTransform: "uppercase" }}>Republic of Liberia</div>
-        <div style={{ fontFamily: "Cormorant Garamond, Georgia, serif", fontSize: 22, fontWeight: 600 }}>Sacred Heart Catholic High School</div>
-        <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2, textTransform: "uppercase", letterSpacing: 1 }}>&ldquo;Ora et Labora&rdquo; — Faith, Excellence &amp; Service · Monrovia, Liberia</div>
+        {t.header_line && <div style={{ fontSize: 10, letterSpacing: 2, opacity: 0.6, marginBottom: 4, textTransform: "uppercase" }}>{t.header_line}</div>}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+          {t.show_logo && school?.logo && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={school.logo} alt="" style={{ height: 38, width: 38, objectFit: "contain" }} />
+          )}
+          <div style={{ fontFamily: "Cormorant Garamond, Georgia, serif", fontSize: 22, fontWeight: 600 }}>{schoolName}</div>
+        </div>
+        {t.show_motto && (
+          <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2, textTransform: "uppercase", letterSpacing: 1 }}>&ldquo;{schoolMotto}&rdquo; — Faith, Excellence &amp; Service · {schoolAddr}</div>
+        )}
         <div style={{ fontSize: 13, fontWeight: 500, color: "#E8C96A", marginTop: 8 }}>OFFICIAL STUDENT REPORT CARD — ACADEMIC YEAR {data.academic_year}</div>
       </div>
 
@@ -132,14 +168,19 @@ function ReportCardView({ data, teacherComment, principalComment }: {
       {/* Summary */}
       <div style={{ padding: "12px 18px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, fontSize: 12 }}>
-          {[
+          {([
             ["Class Rank", data.ranking.rank ? `🏆 ${data.ranking.rank} of ${data.ranking.class_size}` : "—"],
             ["Year Average", overallAvg?.toFixed(1) ?? "—"],
             ["Final Grade", overallAvg ? (overallAvg >= 95 ? "A — Excellent" : overallAvg >= 85 ? "B — Good" : overallAvg >= 78 ? "C — Average" : overallAvg >= 70 ? "D — Below Avg" : "F — Failing") : "—"],
-            ["Days Present", `${data.attendance.present ?? 0} / ${data.attendance.total ?? 0}`],
-            ["Days Absent", String(data.attendance.absent ?? 0)],
-            ["Attendance", data.attendance.total ? `${Math.round(((data.attendance.present ?? 0) + (data.attendance.late ?? 0)) / data.attendance.total * 100)}%` : "—"],
-          ].map(([label, val]) => (
+            ...(t.show_attendance ? [
+              ["Days Present", `${data.attendance.present ?? 0} / ${data.attendance.total ?? 0}`],
+              ["Days Absent", String(data.attendance.absent ?? 0)],
+              ["Attendance", data.attendance.total ? `${Math.round(((data.attendance.present ?? 0) + (data.attendance.late ?? 0)) / data.attendance.total * 100)}%` : "—"],
+            ] : []),
+            ...(t.show_finance_balance ? [
+              ["Fees Balance", financeBalance != null ? `$${financeBalance.toFixed(2)}` : "—"],
+            ] : []),
+          ] as [string, string][]).map(([label, val]) => (
             <div key={label} style={{ borderBottom: "1px solid #ddd", paddingBottom: 4 }}>
               <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: 0.5, color: "#888", marginBottom: 2 }}>{label}</div>
               <div style={{ fontWeight: 500, fontSize: 12.5, color: "#1A2A4A" }}>{val}</div>
@@ -148,6 +189,25 @@ function ReportCardView({ data, teacherComment, principalComment }: {
         </div>
       </div>
 
+      {/* Grading scale legend */}
+      {t.show_grading_scale && gradingScale && gradingScale.length > 0 && (
+        <>
+          <hr style={{ border: "none", borderTop: "1px solid #ddd", margin: 0 }} />
+          <div style={{ padding: "10px 18px" }}>
+            <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6, color: "#1A2A4A" }}>Grading Scale</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 10 }}>
+              {gradingScale.map((g) => (
+                <span key={g.grade_letter} style={{ border: "1px solid #ddd", borderRadius: 3, padding: "2px 7px", color: "#1A2A4A" }}>
+                  <b>{g.grade_letter}</b> {g.min_score}–{g.max_score} · {g.description}
+                </span>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {t.show_conduct && (
+      <>
       <hr style={{ border: "none", borderTop: "2px solid #1A2A4A", margin: 0 }} />
 
       {/* Conduct */}
@@ -178,13 +238,15 @@ function ReportCardView({ data, teacherComment, principalComment }: {
           })}
         </div>
       </div>
+      </>
+      )}
 
       <hr style={{ border: "none", borderTop: "2px solid #1A2A4A", margin: 0 }} />
 
       {/* Comments */}
       <div style={{ padding: "12px 18px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          {[["Class Teacher's Comment", teacherComment], ["Principal's Comment", principalComment]].map(([label, val]) => (
+          {[[t.teacher_comment_label, teacherComment], [t.principal_comment_label, principalComment]].map(([label, val]) => (
             <div key={label}>
               <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 5, color: "#1A2A4A" }}>{label}</div>
               <div style={{ border: "1px solid #ccc", borderRadius: 3, padding: 7, minHeight: 44, fontSize: 11.5, color: "#333", fontStyle: "italic" }}>{val || "—"}</div>
@@ -202,10 +264,10 @@ function ReportCardView({ data, teacherComment, principalComment }: {
 
       {/* Signatures */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, padding: "14px 18px" }}>
-        {["Class Teacher's Signature", "Principal's Signature", "School Stamp"].map((label, i) => (
-          <div key={label} style={{ borderTop: "1px solid #1A2A4A", paddingTop: 5, textAlign: "center", fontSize: 10, color: "#666" }}>
+        {["Class Teacher's Signature", t.principal_signature || "Principal's Signature", "School Stamp"].map((label, i) => (
+          <div key={i} style={{ borderTop: "1px solid #1A2A4A", paddingTop: 5, textAlign: "center", fontSize: 10, color: "#666" }}>
             {i === 2 ? (
-              <><div style={{ width: 52, height: 52, border: "1px solid #DDD", borderRadius: "50%", margin: "0 auto 4px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#aaa" }}>SEAL</div>{label}</>
+              <><div style={{ width: 52, height: 52, border: "1px solid #DDD", borderRadius: "50%", margin: "0 auto 4px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#aaa" }}>SEAL</div>School Stamp</>
             ) : (
               <>{label}<br /><br /><span style={{ fontSize: 9 }}>Date: _______________</span></>
             )}
@@ -215,7 +277,7 @@ function ReportCardView({ data, teacherComment, principalComment }: {
 
       {/* Footer */}
       <div style={{ background: "#0D1A33", color: "rgba(255,255,255,0.6)", textAlign: "center", padding: 7, fontSize: 10, borderTop: "2px solid #C8A84B" }}>
-        Sacred Heart Catholic High School · Monrovia, Liberia · sacredheart@edu.lr
+        {t.footer_text || `${schoolName} · ${schoolAddr}${schoolEmail ? ` · ${schoolEmail}` : ""}`}
       </div>
     </div>
   );
@@ -228,7 +290,19 @@ export default function ReportCardPage() {
   const printRef = useRef<HTMLDivElement>(null);
 
   const { data: students } = useStudents({ page_size: 500 });
+  const { data: school } = useSchoolProfile();
+  const { data: tpl } = useReportCardTemplate();
+  const { data: scaleData } = useGradingScales();
   const { data: rcData, isLoading, isError: rcError, refetch: refetchRc } = useReportCard(Number(selStudent), !!selStudent);
+
+  // Fees balance — only needed when the template shows it; fetch lazily.
+  const { data: invoiceData } = useInvoices(
+    { student: Number(selStudent) },
+    { enabled: !!selStudent && !!tpl?.show_finance_balance },
+  );
+  const financeBalance = invoiceData?.results
+    ? invoiceData.results.reduce((sum, inv) => sum + Number(inv.balance ?? 0), 0)
+    : null;
 
   const handlePrint = () => window.print();
 
@@ -282,7 +356,15 @@ export default function ReportCardPage() {
           </div>
         ) : (
           <div ref={printRef}>
-            <ReportCardView data={rcData} teacherComment={teacherComment} principalComment={principalComment} />
+            <ReportCardView
+              data={rcData}
+              teacherComment={teacherComment}
+              principalComment={principalComment}
+              school={school}
+              tpl={tpl}
+              gradingScale={scaleData?.results}
+              financeBalance={financeBalance}
+            />
           </div>
         )}
       </div>

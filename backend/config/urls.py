@@ -13,7 +13,7 @@ from apps.students.views import (
 from apps.teachers.views import TeacherViewSet, TeacherAssignmentViewSet
 from apps.attendance.views import AttendanceRecordViewSet, AttendanceSummaryViewSet
 from apps.marks.views import (
-    MarkViewSet, GradingScaleViewSet,
+    MarkViewSet, GradingScaleViewSet, AssessmentTemplateViewSet,
     ConductCategoryViewSet, ConductRatingViewSet,
     PromotionDecisionViewSet,
 )
@@ -21,6 +21,7 @@ from apps.finance.views import InvoiceViewSet, PaymentViewSet, ReceiptViewSet
 from apps.trash.views import TrashListView, TrashItemView, TrashRestoreView
 from apps.snapshots.views import SnapshotViewSet
 from apps.audit.views import AuditLogViewSet
+from apps.school.views import SchoolProfileView, ReportCardTemplateView
 from .views import health_check
 
 router = DefaultRouter()
@@ -43,6 +44,7 @@ router.register("attendance",         AttendanceRecordViewSet,  basename="attend
 router.register("attendance-summary", AttendanceSummaryViewSet, basename="attendance-summary")
 router.register("marks",              MarkViewSet,              basename="mark")
 router.register("grading-scales",     GradingScaleViewSet,      basename="grading-scale")
+router.register("assessment-templates", AssessmentTemplateViewSet, basename="assessment-template")
 router.register("conduct-categories", ConductCategoryViewSet,   basename="conduct-category")
 router.register("conduct-ratings",    ConductRatingViewSet,     basename="conduct-rating")
 router.register("promotions",         PromotionDecisionViewSet, basename="promotion")
@@ -69,6 +71,10 @@ urlpatterns = [
     path("api/auth/login/",      SMSTokenView.as_view(),       name="token_obtain"),
     path("api/auth/refresh/",    TokenRefreshView.as_view(),   name="token_refresh"),
     path("api/auth/logout/",     SMSLogoutView.as_view(),      name="token_blacklist"),
+
+    # School profile (singleton settings; read-any, write-admin)
+    path("api/school-profile/", SchoolProfileView.as_view(), name="school-profile"),
+    path("api/report-card-template/", ReportCardTemplateView.as_view(), name="report-card-template"),
 
     # Trash (soft-delete recovery, admin-only)
     path("api/trash/",                              TrashListView.as_view(),    name="trash-list"),
