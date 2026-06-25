@@ -259,3 +259,43 @@ export const snapshotsApi = {
   create: (payload: CreateSnapshotPayload) => create<Snapshot>("/api/snapshots/", payload),
   delete: (id: number) => del(`/api/snapshots/${id}/`),
 };
+
+// ── Audit trail (admin-only, read-only) ───────────────────────────
+export interface AuditLog {
+  id: number;
+  actor: number | null;
+  actor_email: string;
+  actor_name: string;
+  actor_role: string;
+  action: string;
+  action_display: string;
+  module: string;
+  object_id: string;
+  object_name: string;
+  description: string;
+  old_value: Record<string, unknown> | null;
+  new_value: Record<string, unknown> | null;
+  ip_address: string | null;
+  user_agent: string;
+  timestamp: string;
+}
+export interface AuditLogMeta {
+  actions: { value: string; label: string }[];
+  modules: string[];
+  actors: string[];
+}
+export interface AuditLogParams {
+  page?: number;
+  page_size?: number;
+  search?: string;
+  action?: string;
+  module?: string;
+  actor?: string;
+  date_from?: string;
+  date_to?: string;
+  ordering?: string;
+}
+export const auditApi = {
+  list: (p?: AuditLogParams) => list<AuditLog>("/api/audit-logs/", p as Record<string, unknown>),
+  meta: () => one<AuditLogMeta>("/api/audit-logs/meta/"),
+};

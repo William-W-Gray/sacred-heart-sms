@@ -9,6 +9,9 @@ from .models import AttendanceRecord, AttendanceSummary
 from apps.students.models import Student
 from apps.users.views import IsAdminOrTeacher, scope_to_own_student
 from apps.trash.mixins import SoftDeleteViewSetMixin
+from apps.audit.mixins import AuditLogMixin
+from apps.audit.models import AuditAction
+from apps.audit.services import log_action
 
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
@@ -42,7 +45,9 @@ class AttendanceSummarySerializer(serializers.ModelSerializer):
         return obj.student.full_name
 
 
-class AttendanceRecordViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+class AttendanceRecordViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    audit_module = "Attendance"
+    audit_create_action = audit_update_action = AuditAction.ATTENDANCE_ENTRY
     queryset = AttendanceRecord.objects.select_related(
         "student", "subject", "class_group", "recorded_by"
     ).all()
@@ -71,13 +76,13 @@ class AttendanceRecordViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         self._check_teacher_scope(serializer.validated_data["student"], serializer.validated_data["subject"])
-        serializer.save()
+        super().perform_create(serializer)
 
     def perform_update(self, serializer):
         student = serializer.validated_data.get("student", serializer.instance.student)
         subject = serializer.validated_data.get("subject", serializer.instance.subject)
         self._check_teacher_scope(student, subject)
-        serializer.save()
+        super().perform_update(serializer)
 
     @action(detail=False, methods=["post"], url_path="bulk")
     def bulk(self, request):
@@ -152,6 +157,13 @@ class AttendanceRecordViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
         except Exception:
             import logging
             logging.getLogger(__name__).exception("Failed to refresh AttendanceSummary after bulk save")
+
+        if results:
+            log_action(
+                action=AuditAction.ATTENDANCE_ENTRY, module="Attendance", request=request,
+                description=f"Bulk attendance entry: {len(results)} record(s)",
+                new_value={"count": len(results)},
+            )
 
         return Response(AttendanceRecordSerializer(results, many=True).data)
 

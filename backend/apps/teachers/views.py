@@ -4,6 +4,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from .models import Teacher, TeacherAssignment
 from apps.users.views import IsAdminUser
 from apps.trash.mixins import SoftDeleteViewSetMixin
+from apps.audit.mixins import AuditLogMixin
 
 
 def _upsert_assignment(teacher, cls, subject_id, academic_year, is_active=True):
@@ -202,7 +203,8 @@ class TeacherAssignmentSerializer(serializers.ModelSerializer):
         return str(obj.assigned_class)
 
 
-class TeacherViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+class TeacherViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    audit_module = "Teachers"
     queryset           = Teacher.objects.select_related("user").all()
     serializer_class   = TeacherSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -244,7 +246,8 @@ class TeacherViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
 
-class TeacherAssignmentViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+class TeacherAssignmentViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    audit_module = "Teacher Assignments"
     queryset = TeacherAssignment.objects.select_related(
         "teacher", "assigned_class", "subject", "academic_year"
     ).all()

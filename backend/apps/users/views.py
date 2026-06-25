@@ -2,10 +2,13 @@ from rest_framework import serializers, viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenBlacklistView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from apps.trash.mixins import SoftDeleteViewSetMixin
+from apps.audit.mixins import AuditLogMixin
+from apps.audit.models import AuditAction
+from apps.audit.services import log_action
 from .models import User, Notification
 
 
@@ -34,6 +37,32 @@ class LoginRateThrottle(AnonRateThrottle):
 class SMSTokenView(TokenObtainPairView):
     serializer_class = SMSTokenSerializer
     throttle_classes = [LoginRateThrottle]
+
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            email = (request.data.get("email") or "").strip()
+            actor = User.objects.filter(email__iexact=email).first() if email else None
+            log_action(
+                action=AuditAction.LOGIN, module="Auth", request=request, actor=actor,
+                object_name=email, description=f"Signed in: {email}",
+            )
+        return response
+
+
+class SMSLogoutView(TokenBlacklistView):
+    """Blacklists the refresh token (as before) and records a logout. The
+    access token is still in the Authorization header here, so request.user is
+    the user logging out."""
+    def post(self, request, *args, **kwargs):
+        actor = request.user if getattr(request.user, "is_authenticated", False) else None
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200 and actor:
+            log_action(
+                action=AuditAction.LOGOUT, module="Auth", request=request, actor=actor,
+                object_name=actor.email, description=f"Signed out: {actor.email}",
+            )
+        return response
 
 
 # ── User serializers ────────────────────────────────────────────
@@ -400,9 +429,10 @@ class NotificationSerializer(serializers.ModelSerializer):
 
 
 # ── ViewSets ────────────────────────────────────────────────────
-class UserViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+class UserViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     queryset = User.objects.all().order_by("email")
     permission_classes = [permissions.IsAuthenticated]
+    audit_module = "Users"
 
     def get_queryset(self):
         user = self.request.user
@@ -436,6 +466,10 @@ class UserViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
             raise ValidationError({"password": "Password must be at least 8 characters."})
         user.set_password(new_password)
         user.save(update_fields=["password"])
+        log_action(
+            action=AuditAction.ROLE_PERMISSION_CHANGE, module="Users", request=request,
+            obj=user, description=f"Reset password for {user.email}",
+        )
         return Response({"detail": "Password reset successfully."})
 
     @action(detail=False, methods=["get"], url_path="me")
@@ -448,6 +482,10 @@ class UserViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         request.user.set_password(serializer.validated_data["new_password"])
         request.user.save()
+        log_action(
+            action=AuditAction.PROFILE_UPDATE, module="Users", request=request,
+            obj=request.user, description="Changed own password",
+        )
         return Response({"detail": "Password updated successfully."})
 
 

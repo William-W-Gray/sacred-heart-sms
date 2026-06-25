@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     # Internal apps
     "apps.trash",
     "apps.snapshots",
+    "apps.audit",
     "apps.users",
     "apps.students",
     "apps.teachers",

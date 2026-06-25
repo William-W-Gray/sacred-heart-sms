@@ -9,6 +9,9 @@ from .models import Mark, GradingScale, ConductCategory, ConductRating, Promotio
 from apps.students.models import Student
 from apps.users.views import IsAdminUser, IsAdminOrTeacher, scope_to_own_student
 from apps.trash.mixins import SoftDeleteViewSetMixin
+from apps.audit.mixins import AuditLogMixin
+from apps.audit.models import AuditAction
+from apps.audit.services import log_action
 
 
 class GradingScaleSerializer(serializers.ModelSerializer):
@@ -89,7 +92,9 @@ class PromotionDecisionSerializer(serializers.ModelSerializer):
 
 # ── ViewSets ─────────────────────────────────────────────────────
 
-class GradingScaleViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+class GradingScaleViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    audit_module = "Grading Scale"
+    audit_create_action = audit_update_action = audit_delete_action = AuditAction.SETTINGS_CHANGE
     queryset           = GradingScale.objects.all()
     serializer_class   = GradingScaleSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -102,7 +107,9 @@ class GradingScaleViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
 
-class MarkViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+class MarkViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    audit_module = "Marks"
+    audit_create_action = audit_update_action = AuditAction.MARKS_ENTRY
     queryset = Mark.objects.select_related(
         "student", "subject", "semester", "recorded_by"
     ).all()
@@ -131,13 +138,13 @@ class MarkViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         self._check_teacher_scope(serializer.validated_data["student"], serializer.validated_data["subject"])
-        serializer.save()
+        super().perform_create(serializer)
 
     def perform_update(self, serializer):
         student = serializer.validated_data.get("student", serializer.instance.student)
         subject = serializer.validated_data.get("subject", serializer.instance.subject)
         self._check_teacher_scope(student, subject)
-        serializer.save()
+        super().perform_update(serializer)
 
     @action(detail=False, methods=["post"], url_path="bulk")
     def bulk(self, request):
@@ -205,10 +212,19 @@ class MarkViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
                 else:
                     updated += 1
 
+        if created or updated:
+            log_action(
+                action=AuditAction.MARKS_ENTRY, module="Marks", request=request,
+                description=f"Bulk marks entry: {created} created, {updated} updated",
+                new_value={"created": created, "updated": updated},
+            )
+
         return Response({"created": created, "updated": updated})
 
 
-class ConductCategoryViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+class ConductCategoryViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    audit_module = "Conduct"
+    audit_create_action = audit_update_action = audit_delete_action = AuditAction.SETTINGS_CHANGE
     queryset           = ConductCategory.objects.all()
     serializer_class   = ConductCategorySerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -219,7 +235,8 @@ class ConductCategoryViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
 
-class ConductRatingViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+class ConductRatingViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    audit_module = "Conduct"
     queryset = ConductRating.objects.select_related(
         "student", "category", "semester", "rated_by"
     ).all()
@@ -248,12 +265,12 @@ class ConductRatingViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         self._check_teacher_scope(serializer.validated_data["student"])
-        serializer.save()
+        super().perform_create(serializer)
 
     def perform_update(self, serializer):
         student = serializer.validated_data.get("student", serializer.instance.student)
         self._check_teacher_scope(student)
-        serializer.save()
+        super().perform_update(serializer)
 
     @action(detail=False, methods=["post"], url_path="bulk")
     def bulk(self, request):
@@ -316,10 +333,18 @@ class ConductRatingViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
                     serializer.save()
                 results.append(serializer.instance)
 
+        if results:
+            log_action(
+                action=AuditAction.UPDATE, module="Conduct", request=request,
+                description=f"Bulk conduct entry: {len(results)} rating(s) recorded",
+                new_value={"count": len(results)},
+            )
+
         return Response(ConductRatingSerializer(results, many=True).data)
 
 
-class PromotionDecisionViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+class PromotionDecisionViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    audit_module = "Promotions"
     queryset = PromotionDecision.objects.select_related(
         "student", "academic_year", "current_class", "next_class"
     ).all()

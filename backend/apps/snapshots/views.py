@@ -7,6 +7,8 @@ from django.core.management import call_command
 from rest_framework import serializers, viewsets, permissions
 
 from apps.trash.mixins import SoftDeleteViewSetMixin
+from apps.audit.mixins import AuditLogMixin
+from apps.audit.models import AuditAction
 from apps.users.views import IsAdminUser
 from .models import Snapshot
 
@@ -100,7 +102,9 @@ class SnapshotSerializer(serializers.ModelSerializer):
         return snapshot
 
 
-class SnapshotViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+class SnapshotViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    audit_module = "Snapshots"
+    audit_create_action = AuditAction.SNAPSHOT_CREATE
     queryset           = Snapshot.objects.all()
     serializer_class    = SnapshotSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]

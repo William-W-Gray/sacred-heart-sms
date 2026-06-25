@@ -3,8 +3,10 @@ import {
   studentsApi, guardiansApi, teachersApi, classesApi, subjectsApi,
   academicYearsApi, semestersApi, attendanceApi, marksApi, conductApi,
   promotionsApi, financeApi, notificationsApi, usersApi, trashApi, snapshotsApi,
-  type CreateUserPayload,
+  auditApi,
+  type CreateUserPayload, type AuditLogParams,
 } from "@/lib/api/services";
+import { keepPreviousData } from "@tanstack/react-query";
 import type { Student, PromotionDecision } from "@/types";
 
 // ── Query key factory ────────────────────────────────────────────
@@ -32,6 +34,8 @@ export const QK = {
   notifications: ()         => ["notifications"] as const,
   trash:       (p?: object) => ["trash", p] as const,
   snapshots:   (p?: object) => ["snapshots", p] as const,
+  auditLogs:   (p?: object) => ["audit-logs", p] as const,
+  auditMeta:   ()           => ["audit-logs", "meta"] as const,
 };
 
 // ── Students ─────────────────────────────────────────────────────
@@ -391,3 +395,16 @@ export const useDeleteSnapshot = () => {
     },
   });
 };
+
+// ── Audit trail (admin-only) ──────────────────────────────────────
+export const useAuditLogs = (params?: AuditLogParams) =>
+  useQuery({
+    queryKey: QK.auditLogs(params),
+    queryFn: () => auditApi.list(params),
+    // keep the previous page visible while the next one loads — avoids the
+    // table flashing empty on every page/filter change.
+    placeholderData: keepPreviousData,
+  });
+
+export const useAuditMeta = () =>
+  useQuery({ queryKey: QK.auditMeta(), queryFn: () => auditApi.meta(), staleTime: 60_000 });

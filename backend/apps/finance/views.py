@@ -7,6 +7,9 @@ from django_filters.rest_framework import DjangoFilterBackend
 from .models import Invoice, Payment, Receipt
 from apps.users.views import IsAdminUser, IsAdminOrFinanceOfficer, scope_to_own_student
 from apps.trash.mixins import SoftDeleteViewSetMixin
+from apps.audit.mixins import AuditLogMixin
+from apps.audit.models import AuditAction
+from apps.audit.services import log_action, serialize_instance, diff_snapshots
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -58,7 +61,8 @@ class ReceiptSerializer(serializers.ModelSerializer):
         fields = ["id", "payment", "receipt_number", "pdf_file", "generated_at"]
 
 
-class InvoiceViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+class InvoiceViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    audit_module = "Finance"
     queryset = Invoice.objects.select_related("student", "semester").prefetch_related("payments").all()
     serializer_class   = InvoiceSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -99,6 +103,34 @@ class PaymentViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(received_by=self.request.user)
+        payment = serializer.instance
+        log_action(
+            action=AuditAction.PAYMENT_CREATE, module="Finance", request=self.request,
+            obj=payment, description=f"Recorded payment: {payment}",
+            new_value=serialize_instance(payment),
+        )
+
+    def perform_update(self, serializer):
+        old_value = serialize_instance(serializer.instance) if serializer.instance else None
+        serializer.save()
+        payment = serializer.instance
+        diff_old, diff_new = diff_snapshots(old_value, serialize_instance(payment))
+        log_action(
+            action=AuditAction.PAYMENT_EDIT, module="Finance", request=self.request,
+            obj=payment, description=f"Edited payment: {payment}",
+            old_value=diff_old, new_value=diff_new,
+        )
+
+    def perform_destroy(self, instance):
+        old_value = serialize_instance(instance)
+        object_id = str(getattr(instance, "pk", "") or "")
+        object_name = str(instance)[:255]
+        super().perform_destroy(instance)
+        log_action(
+            action=AuditAction.PAYMENT_VOID, module="Finance", request=self.request,
+            object_id=object_id, object_name=object_name,
+            description=f"Voided payment: {object_name}", old_value=old_value,
+        )
 
 
 class ReceiptViewSet(viewsets.ReadOnlyModelViewSet):

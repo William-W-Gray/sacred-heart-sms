@@ -3,9 +3,9 @@ from django.urls import path, re_path, include
 from django.conf import settings
 from django.views.static import serve as serve_static
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenRefreshView, TokenBlacklistView
+from rest_framework_simplejwt.views import TokenRefreshView
 
-from apps.users.views import SMSTokenView, UserViewSet, NotificationViewSet
+from apps.users.views import SMSTokenView, SMSLogoutView, UserViewSet, NotificationViewSet
 from apps.students.views import (
     StudentViewSet, GuardianViewSet, ClassViewSet,
     SubjectViewSet, AcademicYearViewSet, SemesterViewSet,
@@ -20,6 +20,7 @@ from apps.marks.views import (
 from apps.finance.views import InvoiceViewSet, PaymentViewSet, ReceiptViewSet
 from apps.trash.views import TrashListView, TrashItemView, TrashRestoreView
 from apps.snapshots.views import SnapshotViewSet
+from apps.audit.views import AuditLogViewSet
 from .views import health_check
 
 router = DefaultRouter()
@@ -57,6 +58,9 @@ router.register("notifications", NotificationViewSet, basename="notification")
 # Snapshots (admin-only data backups)
 router.register("snapshots", SnapshotViewSet, basename="snapshot")
 
+# Audit trail (admin-only, read-only)
+router.register("audit-logs", AuditLogViewSet, basename="audit-log")
+
 urlpatterns = [
     path("admin/",               admin.site.urls),
     path("api/health/",          health_check, name="health-check"),
@@ -64,7 +68,7 @@ urlpatterns = [
     # Auth
     path("api/auth/login/",      SMSTokenView.as_view(),       name="token_obtain"),
     path("api/auth/refresh/",    TokenRefreshView.as_view(),   name="token_refresh"),
-    path("api/auth/logout/",     TokenBlacklistView.as_view(), name="token_blacklist"),
+    path("api/auth/logout/",     SMSLogoutView.as_view(),      name="token_blacklist"),
 
     # Trash (soft-delete recovery, admin-only)
     path("api/trash/",                              TrashListView.as_view(),    name="trash-list"),

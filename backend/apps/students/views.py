@@ -7,6 +7,8 @@ from django.db import transaction
 from .models import Student, Guardian, StudentGuardian, Class, Subject, AcademicYear, Semester
 from apps.users.views import IsAdminUser
 from apps.trash.mixins import SoftDeleteViewSetMixin
+from apps.audit.mixins import AuditLogMixin
+from apps.audit.models import AuditAction
 
 
 # ── Academic year / semester ────────────────────────────────────
@@ -112,7 +114,8 @@ class StudentDetailSerializer(serializers.ModelSerializer):
 
 
 # ── ViewSets ────────────────────────────────────────────────────
-class StudentViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+class StudentViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    audit_module = "Students"
     queryset = Student.objects.select_related("current_class").all()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["status", "gender", "current_class"]
@@ -164,7 +167,8 @@ class StudentViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
         return Response(build_report_card_data(student, year))
 
 
-class GuardianViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+class GuardianViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    audit_module = "Guardians"
     queryset           = Guardian.objects.all()
     serializer_class   = GuardianSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -219,7 +223,8 @@ class GuardianViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
         return Response({"linked": created_count})
 
 
-class ClassViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+class ClassViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    audit_module = "Classes"
     queryset           = Class.objects.select_related("class_teacher", "academic_year").all()
     serializer_class   = ClassSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -256,7 +261,8 @@ class ClassViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
 
-class SubjectViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+class SubjectViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    audit_module = "Subjects"
     queryset           = Subject.objects.all()
     serializer_class   = SubjectSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -291,7 +297,9 @@ class SubjectViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
 
-class AcademicYearViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+class AcademicYearViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    audit_module = "Settings"
+    audit_create_action = audit_update_action = audit_delete_action = AuditAction.SETTINGS_CHANGE
     queryset           = AcademicYear.objects.all()
     serializer_class   = AcademicYearSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -302,7 +310,9 @@ class AcademicYearViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
 
-class SemesterViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+class SemesterViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    audit_module = "Settings"
+    audit_create_action = audit_update_action = audit_delete_action = AuditAction.SETTINGS_CHANGE
     queryset           = Semester.objects.select_related("academic_year").all()
     serializer_class   = SemesterSerializer
     permission_classes = [permissions.IsAuthenticated]

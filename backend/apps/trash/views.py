@@ -15,6 +15,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.users.views import IsAdminUser
+from apps.audit.models import AuditAction
+from apps.audit.services import log_action
 from . import registry
 
 RETENTION_DAYS = 7
@@ -85,7 +87,13 @@ class TrashItemView(APIView):
 
     def delete(self, request, type_, pk):
         obj = _get_trashed_object(type_, pk)
+        object_name = str(obj)[:255]
         obj.delete()  # all_objects is a plain Manager — this is a real hard delete
+        log_action(
+            action=AuditAction.PERMANENT_DELETE, module="Trash", request=request,
+            object_id=str(pk), object_name=object_name,
+            description=f"Permanently deleted {type_}: {object_name}",
+        )
         return Response(status=204)
 
 
@@ -96,4 +104,8 @@ class TrashRestoreView(APIView):
     def post(self, request, type_, pk):
         obj = _get_trashed_object(type_, pk)
         obj.restore()
+        log_action(
+            action=AuditAction.RESTORE, module="Trash", request=request,
+            obj=obj, description=f"Restored {type_}: {obj}",
+        )
         return Response({"detail": "Restored."})
