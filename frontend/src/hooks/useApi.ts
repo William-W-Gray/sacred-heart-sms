@@ -3,8 +3,9 @@ import {
   studentsApi, guardiansApi, teachersApi, classesApi, subjectsApi,
   academicYearsApi, semestersApi, attendanceApi, marksApi, conductApi,
   promotionsApi, financeApi, notificationsApi, usersApi, trashApi, snapshotsApi,
-  auditApi,
-  type CreateUserPayload, type AuditLogParams,
+  auditApi, schoolApi, assessmentTemplatesApi, reportCardTemplateApi,
+  type CreateUserPayload, type AuditLogParams, type SchoolProfile,
+  type AssessmentTemplate, type ReportCardTemplate,
 } from "@/lib/api/services";
 import { keepPreviousData } from "@tanstack/react-query";
 import type { Student, PromotionDecision } from "@/types";
@@ -36,6 +37,9 @@ export const QK = {
   snapshots:   (p?: object) => ["snapshots", p] as const,
   auditLogs:   (p?: object) => ["audit-logs", p] as const,
   auditMeta:   ()           => ["audit-logs", "meta"] as const,
+  schoolProfile: ()         => ["school-profile"] as const,
+  reportCardTemplate: ()    => ["report-card-template"] as const,
+  assessmentTemplates: (p?: object) => ["assessment-templates", p] as const,
 };
 
 // ── Students ─────────────────────────────────────────────────────
@@ -408,3 +412,56 @@ export const useAuditLogs = (params?: AuditLogParams) =>
 
 export const useAuditMeta = () =>
   useQuery({ queryKey: QK.auditMeta(), queryFn: () => auditApi.meta(), staleTime: 60_000 });
+
+// ── School profile (singleton settings) ───────────────────────────
+export const useSchoolProfile = () =>
+  useQuery({ queryKey: QK.schoolProfile(), queryFn: () => schoolApi.get(), staleTime: 60_000 });
+
+export const useUpdateSchoolProfile = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: FormData | Partial<SchoolProfile>) => schoolApi.update(payload),
+    onSuccess: (data) => qc.setQueryData(QK.schoolProfile(), data),
+  });
+};
+
+// ── Report card template (singleton settings) ─────────────────────
+export const useReportCardTemplate = () =>
+  useQuery({ queryKey: QK.reportCardTemplate(), queryFn: () => reportCardTemplateApi.get(), staleTime: 60_000 });
+
+export const useUpdateReportCardTemplate = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Partial<ReportCardTemplate>) => reportCardTemplateApi.update(payload),
+    onSuccess: (data) => qc.setQueryData(QK.reportCardTemplate(), data),
+  });
+};
+
+// ── Grading / assessment templates (admin-defined) ────────────────
+export const useAssessmentTemplates = (params?: Record<string, unknown>) =>
+  useQuery({ queryKey: QK.assessmentTemplates(params), queryFn: () => assessmentTemplatesApi.list(params) });
+
+export const useCreateAssessmentTemplate = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Partial<AssessmentTemplate>) => assessmentTemplatesApi.create(payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["assessment-templates"] }),
+  });
+};
+
+export const useUpdateAssessmentTemplate = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<AssessmentTemplate> }) =>
+      assessmentTemplatesApi.update(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["assessment-templates"] }),
+  });
+};
+
+export const useDeleteAssessmentTemplate = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => assessmentTemplatesApi.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["assessment-templates"] }),
+  });
+};

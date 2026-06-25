@@ -3,7 +3,7 @@ import {
   GraduationCap, Users, TrendingUp, AlertCircle, Plus,
   BarChart2, FileText, CreditCard, CalendarDays, Star, UserCog,
 } from "lucide-react";
-import { useStudents, useTeachers, useInvoices, useAcademicYears } from "@/hooks/useApi";
+import { useStudents, useTeachers, useInvoices, useAcademicYears, useSchoolProfile } from "@/hooks/useApi";
 import { useAuthStore } from "@/store/auth.store";
 import { QueryError } from "@/components/shared/QueryError";
 import Link from "next/link";
@@ -99,6 +99,7 @@ function StatCard({
 
 export default function DashboardPage() {
   const { user, role } = useAuthStore();
+  const { data: school } = useSchoolProfile();
   const currentRole = (role ?? "admin") as UserRole;
 
   const isAdmin          = currentRole === "admin";
@@ -255,7 +256,7 @@ export default function DashboardPage() {
           </div>
           <div className="relative">
             <p className="text-[11px] font-bold tracking-[0.2em] text-[rgba(200,168,75,0.7)] uppercase mb-2">
-              Sacred Heart Catholic High School
+              {school?.school_name || "Sacred Heart Catholic High School"}
             </p>
             <h2 className="text-white font-serif text-2xl sm:text-3xl font-semibold leading-tight">
               {getGreeting()},<br />

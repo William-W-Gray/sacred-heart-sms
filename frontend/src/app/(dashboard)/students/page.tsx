@@ -137,7 +137,9 @@ export default function StudentsPage() {
                             </div>
                           )}
                           <div>
-                            <p className="font-medium text-navy">{student.full_name}</p>
+                            <Link href={`/students/${student.id}`} className="font-medium text-navy hover:text-gold transition-colors">
+                              {student.full_name}
+                            </Link>
                             <p className="text-xs text-[#5A6A8A]">DOB: {student.date_of_birth ?? "—"}</p>
                           </div>
                         </div>

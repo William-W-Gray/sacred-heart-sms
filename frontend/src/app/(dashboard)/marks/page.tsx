@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback } from "react";
 import { Save } from "lucide-react";
-import { useStudents, useClasses, useSubjects, useMarks, useSaveMarksBulk, useGradingScales, useAcademicYears, useSemesters } from "@/hooks/useApi";
+import { useStudents, useClasses, useSubjects, useMarks, useSaveMarksBulk, useGradingScales, useAcademicYears, useSemesters, useAssessmentTemplates } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
 import { QueryError } from "@/components/shared/QueryError";
 import { getApiErrorMessage } from "@/lib/utils/errors";
@@ -47,6 +47,13 @@ export default function MarksPage() {
   const { data: subjects } = useSubjects();
   const { data: scaleData } = useGradingScales();
   const scale = scaleData?.results ?? [];
+
+  // Admin-defined grading templates relevant to this class/subject (or global).
+  const { data: templateData } = useAssessmentTemplates({ is_active: true });
+  const relevantTemplates = (templateData?.results ?? []).filter((t) =>
+    (!t.class_group || String(t.class_group) === selClass) &&
+    (!t.subject || String(t.subject) === selSub),
+  );
 
   const currentYear = years?.results?.find((y) => y.is_current);
   const { data: semestersData } = useSemesters(
@@ -161,6 +168,19 @@ export default function MarksPage() {
       </div>
 
       <div className="page-content space-y-5">
+        {selClass && selSub && relevantTemplates.length > 0 && (
+          <div className="card px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-semibold text-[#5A6A8A] uppercase tracking-wider mr-1">Grading template:</span>
+              {relevantTemplates.map((t) => (
+                <span key={t.id} className="inline-flex items-center gap-1.5 rounded-full bg-navy-pale border border-navy/15 px-2.5 py-1 text-xs text-navy">
+                  <span className="font-medium">{t.name}</span>
+                  <span className="text-[#5A6A8A]">· {t.kind_display} · max {t.max_score}{Number(t.weight) > 0 ? ` · ${t.weight}%` : ""}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         {!selClass || !selSub ? (
           <div className="card flex flex-col items-center justify-center h-64 text-[#8A9ABB]">
             <div className="text-4xl mb-3">📊</div>
