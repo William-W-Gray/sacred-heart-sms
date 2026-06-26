@@ -7,6 +7,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenBlacklistView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
 from rest_framework.views import APIView
 
 from apps.trash.mixins import SoftDeleteViewSetMixin
@@ -530,7 +531,7 @@ class UserViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
         # it here means any authenticated user could force-set a password
         # (their own, since get_queryset still scopes non-admins to
         # themselves) without the old-password check change_password enforces.
-        if self.action in ["create", "list", "retrieve", "destroy", "partial_update", "update", "reset_password"]:
+        if self.action in ["create", "list", "retrieve", "destroy", "partial_update", "update", "reset_password", "force_logout"]:
             return [permissions.IsAuthenticated(), IsAdminUser()]
         return super().get_permissions()
 
@@ -555,6 +556,30 @@ class UserViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
             obj=user, description=f"Reset password for {user.email}",
         )
         return Response({"detail": "Password reset successfully."})
+
+    @action(detail=True, methods=["post"], url_path="force-logout")
+    def force_logout(self, request, pk=None):
+        """Admin: forcibly end a user's sessions for security reasons.
+
+        Blacklists every outstanding refresh token the target holds, so each of
+        their tabs/devices is bounced to /login on its next token refresh (the
+        access token only lives minutes). Recorded as a FORCED_LOGOUT audit
+        event with the admin as actor and the supplied reason."""
+        target = self.get_object()
+        reason = (request.data.get("reason") or "").strip() or "Security lockout by administrator"
+
+        revoked = 0
+        for token in OutstandingToken.objects.filter(user=target):
+            _, created = BlacklistedToken.objects.get_or_create(token=token)
+            if created:
+                revoked += 1
+
+        log_action(
+            action=AuditAction.FORCED_LOGOUT, module="Auth", request=request,
+            obj=target, object_name=target.email,
+            description=f"Forced logout ({reason}): {target.email} — {revoked} session(s) revoked",
+        )
+        return Response({"detail": "User has been logged out.", "sessions_revoked": revoked})
 
     @action(detail=False, methods=["get"], url_path="me")
     def me(self, request):

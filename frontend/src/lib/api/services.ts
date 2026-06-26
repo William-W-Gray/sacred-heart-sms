@@ -36,6 +36,9 @@ export const usersApi = {
   /** Admin force-reset: sets a new password without needing the old one */
   adminResetPassword: (id: number, new_password: string) =>
     api.post(`/api/users/${id}/reset-password/`, { password: new_password }).then((r) => r.data),
+  /** Admin: forcibly revoke a user's sessions (security lockout) */
+  forceLogout: (id: number, reason?: string) =>
+    api.post<{ detail: string; sessions_revoked: number }>(`/api/users/${id}/force-logout/`, { reason }).then((r) => r.data),
 };
 
 // ── Generic helpers ──────────────────────────────────────────────

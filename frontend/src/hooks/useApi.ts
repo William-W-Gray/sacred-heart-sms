@@ -368,6 +368,12 @@ export const useResetUserPassword = () =>
       usersApi.adminResetPassword(id, password),
   });
 
+export const useForceLogout = () =>
+  useMutation({
+    mutationFn: ({ id, reason }: { id: number; reason?: string }) =>
+      usersApi.forceLogout(id, reason),
+  });
+
 // ── Trash (admin-only) ────────────────────────────────────────────
 export const useTrash = (params?: { type?: string }) =>
   useQuery({ queryKey: QK.trash(params), queryFn: () => trashApi.list(params) });
