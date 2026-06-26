@@ -2,8 +2,10 @@
 import { useState, useCallback } from "react";
 import { Save } from "lucide-react";
 import { useStudents, useClasses, useSubjects, useMarks, useSaveMarksBulk, useGradingScales, useAcademicYears, useSemesters, useAssessmentTemplates } from "@/hooks/useApi";
+import { useScopeLock } from "@/hooks/useScopeLock";
 import { useToast } from "@/components/ui/toaster";
 import { QueryError } from "@/components/shared/QueryError";
+import { LockBanner } from "@/components/shared/LockBanner";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { Mark } from "@/types";
 
@@ -74,6 +76,15 @@ export default function MarksPage() {
 
   const saveMarks = useSaveMarksBulk();
 
+  // Deadline lock for the selected scope (teachers only; admins bypass).
+  const lock = useScopeLock({
+    taskTypes: ["test", "exam", "quiz", "assignment"],
+    classId: selClass ? Number(selClass) : null,
+    subjectId: selSub ? Number(selSub) : null,
+    semesterIds: [sem1?.id, sem2?.id],
+  });
+  const locked = !!lock;
+
   // A student has up to two separate Mark rows for a subject — one per
   // semester — not one row with four score columns, so each semester's
   // saved mark has to be looked up (and saved back) separately.
@@ -102,6 +113,10 @@ export default function MarksPage() {
   const handleSave = async () => {
     if (!selClass || !selSub) {
       toast({ title: "Select a class and subject first", variant: "error" });
+      return;
+    }
+    if (locked) {
+      toast({ title: "This academic task is now locked. Please contact the Admin for help.", variant: "error" });
       return;
     }
     if (!sem1 && !sem2) {
@@ -141,9 +156,9 @@ export default function MarksPage() {
               Test &amp; exam scores — averages and grades calculated live from the DB grading scale
             </p>
           </div>
-          <button onClick={handleSave} disabled={saveMarks.isPending} className="btn-gold flex items-center gap-2 disabled:opacity-60">
+          <button onClick={handleSave} disabled={saveMarks.isPending || locked} className="btn-gold flex items-center gap-2 disabled:opacity-60" title={locked ? "Locked by an academic deadline" : undefined}>
             <Save size={15} />
-            {saveMarks.isPending ? "Saving…" : "Save Marks"}
+            {saveMarks.isPending ? "Saving…" : locked ? "Locked" : "Save Marks"}
           </button>
         </div>
 
@@ -168,6 +183,7 @@ export default function MarksPage() {
       </div>
 
       <div className="page-content space-y-5">
+        {lock && <LockBanner window={lock} />}
         {selClass && selSub && relevantTemplates.length > 0 && (
           <div className="card px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -241,7 +257,7 @@ export default function MarksPage() {
                           <input
                             type="number" min={0} max={100} step={0.5}
                             value={m.s1t ?? ""}
-                            disabled={!sem1}
+                            disabled={!sem1 || locked}
                             title={!sem1 ? "Semester 1 hasn't been created yet for this academic year" : undefined}
                             onChange={(e) => updateDraft(student.id, "s1t", e.target.value)}
                             className="w-16 px-2 py-1 text-center text-sm border border-[var(--border-strong)] rounded font-mono bg-white focus:border-navy focus:ring-1 focus:ring-navy/10 outline-none disabled:bg-[var(--surface)] disabled:cursor-not-allowed"
@@ -252,7 +268,7 @@ export default function MarksPage() {
                           <input
                             type="number" min={0} max={100} step={0.5}
                             value={m.s1e ?? ""}
-                            disabled={!sem1}
+                            disabled={!sem1 || locked}
                             title={!sem1 ? "Semester 1 hasn't been created yet for this academic year" : undefined}
                             onChange={(e) => updateDraft(student.id, "s1e", e.target.value)}
                             className="w-16 px-2 py-1 text-center text-sm border border-[var(--border-strong)] rounded font-mono bg-white focus:border-navy focus:ring-1 focus:ring-navy/10 outline-none disabled:bg-[var(--surface)] disabled:cursor-not-allowed"
@@ -267,7 +283,7 @@ export default function MarksPage() {
                           <input
                             type="number" min={0} max={100} step={0.5}
                             value={m.s2t ?? ""}
-                            disabled={!sem2}
+                            disabled={!sem2 || locked}
                             title={!sem2 ? "Semester 2 hasn't been created yet for this academic year" : undefined}
                             onChange={(e) => updateDraft(student.id, "s2t", e.target.value)}
                             className="w-16 px-2 py-1 text-center text-sm border border-[var(--border-strong)] rounded font-mono bg-white focus:border-navy outline-none disabled:bg-[var(--surface)] disabled:cursor-not-allowed"
@@ -278,7 +294,7 @@ export default function MarksPage() {
                           <input
                             type="number" min={0} max={100} step={0.5}
                             value={m.s2e ?? ""}
-                            disabled={!sem2}
+                            disabled={!sem2 || locked}
                             title={!sem2 ? "Semester 2 hasn't been created yet for this academic year" : undefined}
                             onChange={(e) => updateDraft(student.id, "s2e", e.target.value)}
                             className="w-16 px-2 py-1 text-center text-sm border border-[var(--border-strong)] rounded font-mono bg-white focus:border-navy outline-none disabled:bg-[var(--surface)] disabled:cursor-not-allowed"

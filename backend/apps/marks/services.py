@@ -169,3 +169,43 @@ def build_report_card_data(student: "Student", academic_year: "AcademicYear") ->
             "decision_display": promo.get_decision_display() if promo else None,
         },
     }
+
+
+# ── Academic duty deadlines (Phase 4) ────────────────────────────────
+# Task types whose windows gate Mark writes. The Mark model stores test+exam,
+# but admins may configure windows per assessment kind — any closed mark-kind
+# window for the scope locks marks entry.
+MARK_TASK_TYPES = ("assignment", "quiz", "test", "exam")
+
+
+def find_locking_window(task_types, *, teacher, assigned_class, subject,
+                        semester, academic_year, now=None):
+    """Return the AcademicTaskWindow that would BLOCK a teacher write to this
+    scope, or None if the write is allowed.
+
+    Safe-additive: with no matching window, returns None (unrestricted). When
+    windows do match, the most *specific* one (most pinned scope fields) decides;
+    if it is currently open the write is allowed, otherwise it's the blocker.
+    Ties on specificity break toward the most recently updated window.
+    """
+    from .models import AcademicTaskWindow
+
+    if academic_year is None:
+        return None  # can't resolve scope — don't block
+
+    qs = AcademicTaskWindow.objects.filter(
+        task_type__in=list(task_types), academic_year=academic_year,
+    )
+    # null scope field == wildcard "applies to all"
+    qs = qs.filter(Q(semester__isnull=True)       | Q(semester=semester))
+    qs = qs.filter(Q(assigned_class__isnull=True)  | Q(assigned_class=assigned_class))
+    qs = qs.filter(Q(subject__isnull=True)         | Q(subject=subject))
+    qs = qs.filter(Q(teacher__isnull=True)         | Q(teacher=teacher))
+
+    windows = list(qs)
+    if not windows:
+        return None
+
+    windows.sort(key=lambda w: (w.specificity(), w.updated_at), reverse=True)
+    top = windows[0]
+    return None if top.is_editable_now else top

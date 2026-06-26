@@ -11,6 +11,8 @@ import {
 } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/lib/utils/errors";
+import { PasswordChecklist } from "@/components/shared/PasswordChecklist";
+import { passwordError } from "@/lib/passwordPolicy";
 import type { ManagedUser, CreateUserPayload } from "@/lib/api/services";
 import type { UserRole, ClassGroup, Student, Guardian } from "@/types";
 
@@ -59,12 +61,18 @@ const RELATIONSHIPS = [
 // ── Reset Password Modal ──────────────────────────────────────────
 function ResetPasswordModal({ userId, email, onClose }: { userId: number; email: string; onClose: () => void }) {
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const resetPassword = useResetUserPassword();
   const { toast } = useToast();
 
   const handleReset = async () => {
-    if (password.length < 8) {
-      toast({ title: "Password must be at least 8 characters", variant: "error" });
+    const policyError = passwordError(password, { email });
+    if (policyError) {
+      toast({ title: policyError, variant: "error" });
+      return;
+    }
+    if (password !== confirm) {
+      toast({ title: "Passwords do not match", variant: "error" });
       return;
     }
     try {
@@ -88,10 +96,24 @@ function ResetPasswordModal({ userId, email, onClose }: { userId: number; email:
             <input
               type="password"
               className="form-input"
-              placeholder="Enter new password (min 8 chars)"
+              placeholder="Enter a strong new password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+            <PasswordChecklist password={password} ctx={{ email }} />
+          </div>
+          <div>
+            <label className="form-label">Confirm Password *</label>
+            <input
+              type="password"
+              className="form-input"
+              placeholder="Re-enter the new password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+            />
+            {confirm && confirm !== password && (
+              <p className="mt-1 text-xs text-[#8B1A1A]">Passwords do not match.</p>
+            )}
           </div>
         </div>
 
@@ -132,6 +154,7 @@ function UserModal({ userToEdit, onClose }: UserModalProps) {
   const [email, setEmail] = useState(userToEdit?.email ?? "");
   const [role, setRole] = useState<UserRole>(userToEdit?.role ?? "teacher");
   const [password, setPassword] = useState(""); // Only used on Create
+  const [confirmPassword, setConfirmPassword] = useState(""); // Only used on Create
 
   // Role-Specific Profile Details
   const [student_id, setStudentId] = useState(details?.student_id ?? "");
@@ -201,9 +224,16 @@ function UserModal({ userToEdit, onClose }: UserModalProps) {
       toast({ title: "Email is required", variant: "error" });
       return;
     }
-    if (!isEdit && password.length < 8) {
-      toast({ title: "Temporary password must be at least 8 characters", variant: "error" });
-      return;
+    if (!isEdit) {
+      const policyError = passwordError(password, { email, firstName: first_name, lastName: last_name, studentId: student_id });
+      if (policyError) {
+        toast({ title: policyError, variant: "error" });
+        return;
+      }
+      if (password !== confirmPassword) {
+        toast({ title: "Passwords do not match", variant: "error" });
+        return;
+      }
     }
 
     // Build payload with profile variables
@@ -301,16 +331,32 @@ function UserModal({ userToEdit, onClose }: UserModalProps) {
                 />
               </div>
               {!isEdit && (
-                <div>
-                  <label className="form-label font-medium">Temporary Password *</label>
-                  <input
-                    type="password"
-                    className="form-input"
-                    placeholder="Min 8 characters"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="form-label font-medium">Temporary Password *</label>
+                    <input
+                      type="password"
+                      className="form-input"
+                      placeholder="Enter a strong password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <PasswordChecklist password={password} ctx={{ email, firstName: first_name, lastName: last_name, studentId: student_id }} />
+                  </div>
+                  <div>
+                    <label className="form-label font-medium">Confirm Password *</label>
+                    <input
+                      type="password"
+                      className="form-input"
+                      placeholder="Re-enter the password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                    />
+                    {confirmPassword && confirmPassword !== password && (
+                      <p className="mt-1 text-xs text-[#8B1A1A]">Passwords do not match.</p>
+                    )}
+                  </div>
+                </>
               )}
               <div>
                 <label className="form-label font-medium">User Role *</label>

@@ -115,6 +115,10 @@ export interface Student {
   enrolled_at: string;
   updated_at: string;
   guardians: StudentGuardianLink[];
+  finance_hold?: boolean;
+  finance_hold_reason?: string;
+  finance_hold_at?: string | null;
+  finance_hold_by_name?: string | null;
 }
 
 export interface Teacher {
@@ -248,6 +252,7 @@ export interface Invoice {
   balance: number;
   notes: string;
   created_at: string;
+  payments?: Payment[];
 }
 
 export interface Payment {
@@ -306,12 +311,18 @@ export interface ReportCard {
 }
 
 // ── Notifications ────────────────────────────────────────────────
+export type NotificationPriority = "low" | "normal" | "high" | "urgent";
 export interface Notification {
   id: number;
   notification_type: string;
   channel: "in_app" | "email" | "whatsapp";
+  priority: NotificationPriority;
+  recipient_role: string;
   title: string;
   body: string;
+  module: string;
+  action_type: string;
+  related_object_id: string;
   is_read: boolean;
   metadata: Record<string, unknown>;
   created_at: string;

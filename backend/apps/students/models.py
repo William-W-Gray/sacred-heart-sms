@@ -112,6 +112,16 @@ class Student(SoftDeleteModel):
     enrolled_at   = models.DateField(auto_now_add=True)
     updated_at    = models.DateTimeField(auto_now=True)
 
+    # Finance hold: a finance officer can block this student's academic access
+    # (report cards + results) until an outstanding balance is settled. Only
+    # the student themselves / their guardians are blocked — staff still see all.
+    finance_hold        = models.BooleanField(default=False, db_index=True)
+    finance_hold_reason = models.CharField(max_length=255, blank=True)
+    finance_hold_at     = models.DateTimeField(null=True, blank=True)
+    finance_hold_by     = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
+
     class Meta:
         ordering = ["last_name", "first_name"]
 

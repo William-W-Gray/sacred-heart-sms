@@ -45,6 +45,16 @@ class Command(BaseCommand):
             admin.save()
             self.stdout.write("  ✓ Admin user created (admin@sacredheart.edu.lr / admin123)")
 
+        # Finance officer (finance is finance-officer-only; admins are view-only)
+        finance, fcreated = User.objects.get_or_create(
+            email="finance@sacredheart.edu.lr",
+            defaults={"role": User.Role.FINANCE_OFFICER, "first_name": "Grace", "last_name": "Tubman"},
+        )
+        if fcreated:
+            finance.set_password("finance123")
+            finance.save()
+            self.stdout.write("  ✓ Finance officer created (finance@sacredheart.edu.lr / finance123)")
+
         # Classes
         class_data = [
             (12, "A"), (12, "B"), (11, "A"), (11, "B"),

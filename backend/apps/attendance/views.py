@@ -6,12 +6,17 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import AttendanceRecord, AttendanceSummary
-from apps.students.models import Student
+from apps.students.models import Student, Semester
 from apps.users.views import IsAdminOrTeacher, scope_to_own_student
+from apps.marks.views import assert_task_open, bulk_scope_locked
 from apps.trash.mixins import SoftDeleteViewSetMixin
 from apps.audit.mixins import AuditLogMixin
 from apps.audit.models import AuditAction
 from apps.audit.services import log_action
+
+
+def _active_semester():
+    return Semester.objects.filter(is_active=True).first()
 
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
@@ -75,13 +80,19 @@ class AttendanceRecordViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.Mo
             raise PermissionDenied("You are not assigned to this class/subject.")
 
     def perform_create(self, serializer):
-        self._check_teacher_scope(serializer.validated_data["student"], serializer.validated_data["subject"])
+        v = serializer.validated_data
+        self._check_teacher_scope(v["student"], v["subject"])
+        assert_task_open(("attendance",), user=self.request.user, student=v["student"],
+                         subject=v["subject"], semester=_active_semester())
         super().perform_create(serializer)
 
     def perform_update(self, serializer):
-        student = serializer.validated_data.get("student", serializer.instance.student)
-        subject = serializer.validated_data.get("subject", serializer.instance.subject)
+        v = serializer.validated_data
+        student = v.get("student", serializer.instance.student)
+        subject = v.get("subject", serializer.instance.subject)
         self._check_teacher_scope(student, subject)
+        assert_task_open(("attendance",), user=self.request.user, student=student,
+                         subject=subject, semester=_active_semester())
         super().perform_update(serializer)
 
     @action(detail=False, methods=["post"], url_path="bulk")
@@ -102,6 +113,8 @@ class AttendanceRecordViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.Mo
             )
 
         class_id_cache = {}
+        lock_cache, year_cache = {}, {}
+        sem_id = getattr(_active_semester(), "id", None)
 
         with transaction.atomic():
             for rec in request.data.get("records", []):
@@ -116,8 +129,13 @@ class AttendanceRecordViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.Mo
                         class_id_cache[student_id] = Student.objects.filter(
                             pk=student_id
                         ).values_list("current_class_id", flat=True).first()
-                    if (class_id_cache[student_id], subject_id) not in allowed_pairs:
+                    class_id = class_id_cache[student_id]
+                    if (class_id, subject_id) not in allowed_pairs:
                         continue  # teacher not assigned to this class/subject
+                    if bulk_scope_locked(("attendance",), teacher=teacher, class_id=class_id,
+                                         subject_id=subject_id, semester_id=sem_id,
+                                         cache=lock_cache, year_cache=year_cache):
+                        continue  # attendance window closed/read-only for this scope
 
                 # all_objects: a matching record may exist but be trashed
                 # (e.g. it was deleted and is being re-entered) — restore it
@@ -157,6 +175,15 @@ class AttendanceRecordViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.Mo
         except Exception:
             import logging
             logging.getLogger(__name__).exception("Failed to refresh AttendanceSummary after bulk save")
+
+        # Notify students / guardians / admins (best-effort, post-commit).
+        try:
+            from apps.notifications.services import notify_attendance_marked
+            tname = teacher.full_name if teacher else ""
+            notify_attendance_marked(results, teacher_name=tname)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Failed to send attendance notifications")
 
         if results:
             log_action(

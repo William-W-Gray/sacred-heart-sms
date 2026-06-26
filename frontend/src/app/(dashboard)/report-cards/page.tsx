@@ -1,7 +1,8 @@
 "use client";
-import { useState, useRef } from "react";
-import { Printer } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Printer, Lock } from "lucide-react";
 import { useStudents, useReportCard, useSchoolProfile, useReportCardTemplate, useGradingScales, useInvoices } from "@/hooks/useApi";
+import { useAuthStore } from "@/store/auth.store";
 import { QueryError } from "@/components/shared/QueryError";
 import type { ReportCard, ReportCardSubject } from "@/types";
 import type { SchoolProfile, ReportCardTemplate } from "@/lib/api/services";
@@ -284,16 +285,34 @@ function ReportCardView({ data, teacherComment, principalComment, school, tpl, g
 }
 
 export default function ReportCardPage() {
+  const role = useAuthStore((s) => s.role);
+  // Only admins get the full "generator" (editable comments + arbitrary student picker).
+  // Teachers view read-only cards for their assigned students; students/guardians view their own.
+  const canEdit = role === "admin";
+  const showSelector = role !== "student";
+
   const [selStudent,      setStudent]     = useState("");
   const [teacherComment,  setTeacherCmt]  = useState("An exceptional student who consistently demonstrates academic excellence and outstanding character.");
   const [principalComment, setPrincipalCmt] = useState("We are proud of this student's achievements. A true model of Sacred Heart values.");
   const printRef = useRef<HTMLDivElement>(null);
 
   const { data: students } = useStudents({ page_size: 500 });
+
+  // Students (and guardians of a single child) shouldn't have to pick — auto-load their own card.
+  useEffect(() => {
+    if (!selStudent && (role === "student" || role === "guardian")) {
+      const first = students?.results?.[0];
+      if (first) setStudent(String(first.id));
+    }
+  }, [students, role, selStudent]);
   const { data: school } = useSchoolProfile();
   const { data: tpl } = useReportCardTemplate();
   const { data: scaleData } = useGradingScales();
-  const { data: rcData, isLoading, isError: rcError, refetch: refetchRc } = useReportCard(Number(selStudent), !!selStudent);
+  const { data: rcData, isLoading, isError: rcError, error: rcErrObj, refetch: refetchRc } = useReportCard(Number(selStudent), !!selStudent);
+  // Finance hold surfaces as a 403 with a finance message — show that, not a generic error.
+  const rcStatus = (rcErrObj as { response?: { status?: number; data?: { detail?: string } } } | null)?.response;
+  const financeHold = rcStatus?.status === 403;
+  const holdMessage = rcStatus?.data?.detail || "This report card is on hold due to an outstanding balance. Please contact the finance office.";
 
   // Fees balance — only needed when the template shows it; fetch lazily.
   const { data: invoiceData } = useInvoices(
@@ -311,7 +330,7 @@ export default function ReportCardPage() {
       <div className="page-header no-print">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-navy font-serif">Report Card Generator</h1>
+            <h1 className="text-2xl font-semibold text-navy font-serif">{canEdit ? "Report Card Generator" : "Report Card"}</h1>
             <p className="text-sm text-[#5A6A8A] mt-0.5">All marks, conduct &amp; attendance pulled live from the database</p>
           </div>
           <button onClick={handlePrint} disabled={!rcData} className="btn-outline flex items-center gap-2 disabled:opacity-50">
@@ -319,25 +338,33 @@ export default function ReportCardPage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-          <div>
-            <label className="form-label">Student</label>
-            <select value={selStudent} onChange={(e) => setStudent(e.target.value)} className="form-input text-sm">
-              <option value="">Select student…</option>
-              {students?.results?.map((s) => (
-                <option key={s.id} value={s.id}>{s.full_name} — {s.student_id}</option>
-              ))}
-            </select>
+        {(showSelector || canEdit) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+            {showSelector && (
+              <div>
+                <label className="form-label">{role === "guardian" ? "Child" : "Student"}</label>
+                <select value={selStudent} onChange={(e) => setStudent(e.target.value)} className="form-input text-sm">
+                  <option value="">Select student…</option>
+                  {students?.results?.map((s) => (
+                    <option key={s.id} value={s.id}>{s.full_name} — {s.student_id}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {canEdit && (
+              <>
+                <div>
+                  <label className="form-label">Teacher Comment</label>
+                  <input value={teacherComment} onChange={(e) => setTeacherCmt(e.target.value)} className="form-input text-sm" />
+                </div>
+                <div>
+                  <label className="form-label">Principal Comment</label>
+                  <input value={principalComment} onChange={(e) => setPrincipalCmt(e.target.value)} className="form-input text-sm" />
+                </div>
+              </>
+            )}
           </div>
-          <div>
-            <label className="form-label">Teacher Comment</label>
-            <input value={teacherComment} onChange={(e) => setTeacherCmt(e.target.value)} className="form-input text-sm" />
-          </div>
-          <div>
-            <label className="form-label">Principal Comment</label>
-            <input value={principalComment} onChange={(e) => setPrincipalCmt(e.target.value)} className="form-input text-sm" />
-          </div>
-        </div>
+        )}
       </div>
 
       <div className="page-content">
@@ -349,6 +376,14 @@ export default function ReportCardPage() {
         ) : isLoading ? (
           <div className="card flex items-center justify-center h-64 text-[#5A6A8A] text-sm">
             Loading report card data…
+          </div>
+        ) : financeHold ? (
+          <div className="card flex flex-col items-center justify-center h-64 text-center px-6">
+            <div className="w-12 h-12 rounded-full bg-[var(--err-bg)] flex items-center justify-center mb-3">
+              <Lock size={22} className="text-[var(--err)]" />
+            </div>
+            <p className="font-semibold text-[var(--err)]">Report card on hold</p>
+            <p className="text-sm text-[#5A6A8A] mt-1 max-w-sm">{holdMessage}</p>
           </div>
         ) : rcError || !rcData ? (
           <div className="card">

@@ -1,25 +1,60 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
-import Cookies from "js-cookie";
 import { jwtDecode } from "jwt-decode";
 import type { JWTPayload } from "@/types";
 
 export const BASE_URL = typeof window !== "undefined" ? "" : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000");
 
-// ── Token helpers ────────────────────────────────────────────────
-export const getAccessToken  = () => Cookies.get("sms_access")  ?? null;
-export const getRefreshToken = () => Cookies.get("sms_refresh") ?? null;
+// ── Token storage: sessionStorage (per-tab isolation) ────────────
+// Tokens live in sessionStorage, NOT cookies/localStorage, on purpose:
+// sessionStorage is scoped to a single tab, so logging in as a different
+// user in another tab can never overwrite this tab's token (the old
+// "admin tab silently became the student" bug) and a logout/refresh in
+// one tab can't 401 every other tab. Tokens survive same-tab refresh /
+// hard-refresh, but a brand-new tab or a reopened browser starts fresh.
+const ACCESS_KEY  = "sms_access";
+const REFRESH_KEY = "sms_refresh";
+
+const store = () => (typeof window !== "undefined" ? window.sessionStorage : null);
+
+export const getAccessToken  = () => store()?.getItem(ACCESS_KEY)  ?? null;
+export const getRefreshToken = () => store()?.getItem(REFRESH_KEY) ?? null;
 
 export const setTokens = (access: string, refresh: string) => {
-  const decoded = jwtDecode<JWTPayload>(access);
-  const expires = new Date(decoded.exp * 1000);
-  const secure  = process.env.NODE_ENV === "production";
-  Cookies.set("sms_access",  access,  { expires, sameSite: "strict", secure });
-  Cookies.set("sms_refresh", refresh, { expires: 30, sameSite: "strict", secure });
+  const s = store();
+  if (!s) return;
+  s.setItem(ACCESS_KEY, access);
+  s.setItem(REFRESH_KEY, refresh);
 };
 
 export const clearTokens = () => {
-  Cookies.remove("sms_access");
-  Cookies.remove("sms_refresh");
+  const s = store();
+  s?.removeItem(ACCESS_KEY);
+  s?.removeItem(REFRESH_KEY);
+  purgeLegacyCookies();
+};
+
+// Earlier builds stored tokens in shared cookies. Any cookie left over
+// from that scheme would re-introduce the cross-tab leak (and middleware
+// would still see it), so strip them whenever we touch the session.
+const purgeLegacyCookies = () => {
+  if (typeof document === "undefined") return;
+  for (const name of [ACCESS_KEY, REFRESH_KEY]) {
+    document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+  }
+};
+purgeLegacyCookies();
+
+// Refresh token is gone/expired — wipe the session and bounce to login with
+// a flag so the login page can explain *why* (instead of a silent redirect).
+// Full reload re-inits the Zustand store from the now-cleared sessionStorage,
+// and the on-/login guard below prevents a redirect loop.
+const endSession = () => {
+  clearTokens();
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem("sms-auth");
+  if (window.location.pathname !== "/login") {
+    window.location.href = "/login?session=expired";
+  }
 };
 
 export const decodeToken = (token: string): JWTPayload => jwtDecode<JWTPayload>(token);
@@ -91,8 +126,7 @@ api.interceptors.response.use(
 
     const refresh = getRefreshToken();
     if (!refresh) {
-      clearTokens();
-      window.location.href = "/login";
+      endSession();
       return Promise.reject(error);
     }
 
@@ -109,8 +143,7 @@ api.interceptors.response.use(
       // their tokens so they aren't logged out just for losing connectivity.
       const axiosErr = refreshError as AxiosError;
       if (axiosErr.response) {
-        clearTokens();
-        window.location.href = "/login";
+        endSession();
       }
       return Promise.reject(refreshError);
     } finally {

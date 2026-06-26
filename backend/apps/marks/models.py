@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.utils import timezone
 from apps.students.models import Student, Subject, Semester, AcademicYear, Class
 from apps.trash.models import SoftDeleteModel
 
@@ -170,3 +171,77 @@ class PromotionDecision(SoftDeleteModel):
 
     def __str__(self) -> str:
         return f"{self.student} – {self.decision} ({self.academic_year})"
+
+
+class AcademicTaskWindow(SoftDeleteModel):
+    """Admin-configured open/close window that governs WHEN a teacher may perform
+    an academic duty (attendance, marks, conduct, report comments) for a scope of
+    class / subject / teacher / semester.
+
+    Safe-additive by design: if no window matches a given write, that write is
+    unrestricted — exactly as before this model existed. Locking only takes
+    effect once an admin creates a window that is (or becomes) closed/read-only.
+    The most *specific* matching window wins, so a school can close everything
+    and selectively reopen one class, or vice-versa. See
+    apps.marks.services.assert_task_open / find_locking_window for enforcement.
+    """
+    class TaskType(models.TextChoices):
+        ATTENDANCE     = "attendance",     "Attendance"
+        ASSIGNMENT     = "assignment",     "Assignment / Homework"
+        QUIZ           = "quiz",           "Quiz Marks"
+        TEST           = "test",           "Test Marks"
+        EXAM           = "exam",           "Exam Marks"
+        CONDUCT        = "conduct",        "Conduct Entry"
+        REPORT_COMMENT = "report_comment", "Report Card Comments"
+
+    class Status(models.TextChoices):
+        AUTO     = "auto",     "Automatic (by date/time)"
+        OPEN     = "open",     "Open"
+        CLOSED   = "closed",   "Closed"
+        READONLY = "readonly", "Read-Only"
+
+    task_type      = models.CharField(max_length=20, choices=TaskType.choices, db_index=True)
+    academic_year  = models.ForeignKey(AcademicYear, on_delete=models.CASCADE, related_name="task_windows")
+    semester       = models.ForeignKey(Semester, on_delete=models.CASCADE, null=True, blank=True, related_name="task_windows")
+    assigned_class = models.ForeignKey(Class, on_delete=models.CASCADE, null=True, blank=True, related_name="task_windows")
+    subject        = models.ForeignKey(Subject, on_delete=models.CASCADE, null=True, blank=True, related_name="task_windows")
+    teacher        = models.ForeignKey("teachers.Teacher", on_delete=models.CASCADE, null=True, blank=True, related_name="task_windows")
+    open_at        = models.DateTimeField(null=True, blank=True)
+    close_at       = models.DateTimeField(null=True, blank=True)
+    status         = models.CharField(max_length=20, choices=Status.choices, default=Status.AUTO)
+    note           = models.CharField(max_length=255, blank=True)
+    created_by     = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    created_at     = models.DateTimeField(auto_now_add=True)
+    updated_at     = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def effective_status(self, now=None) -> str:
+        """Resolve the real status right now: manual overrides win, otherwise
+        AUTO derives Open/Closed from the open_at/close_at window."""
+        if self.status == self.Status.READONLY:
+            return self.Status.READONLY
+        if self.status == self.Status.CLOSED:
+            return self.Status.CLOSED
+        if self.status == self.Status.OPEN:
+            return self.Status.OPEN
+        now = now or timezone.now()
+        if self.open_at and now < self.open_at:
+            return self.Status.CLOSED   # not opened yet
+        if self.close_at and now > self.close_at:
+            return self.Status.CLOSED   # deadline passed
+        return self.Status.OPEN
+
+    @property
+    def is_editable_now(self) -> bool:
+        return self.effective_status() == self.Status.OPEN
+
+    def specificity(self) -> int:
+        """How many scope fields are pinned (vs. wildcard) — the most specific
+        matching window decides a given write."""
+        return sum(1 for f in (self.semester_id, self.assigned_class_id, self.subject_id, self.teacher_id) if f is not None)
+
+    def __str__(self) -> str:
+        scope = str(self.assigned_class) if self.assigned_class else "All classes"
+        return f"{self.get_task_type_display()} · {scope} · {self.effective_status()}"

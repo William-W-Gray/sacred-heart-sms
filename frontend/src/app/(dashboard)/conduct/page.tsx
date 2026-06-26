@@ -2,8 +2,10 @@
 import { useState, useCallback } from "react";
 import { Save } from "lucide-react";
 import { useStudents, useConductCategories, useConductRatings, useSaveConductBulk } from "@/hooks/useApi";
+import { useScopeLock } from "@/hooks/useScopeLock";
 import { useToast } from "@/components/ui/toaster";
 import { QueryError } from "@/components/shared/QueryError";
+import { LockBanner } from "@/components/shared/LockBanner";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 
 export default function ConductPage() {
@@ -18,6 +20,11 @@ export default function ConductPage() {
     selStudent ? { student: selStudent, semester__number: selSem } : undefined,
   );
   const saveConduct = useSaveConductBulk();
+
+  // Deadline lock for this student's class (teachers only; admins bypass).
+  const selStu = students?.results?.find((s) => String(s.id) === selStudent);
+  const lock = useScopeLock({ taskTypes: ["conduct"], classId: selStu?.current_class ?? null });
+  const locked = !!lock;
 
   const categories = catData?.results ?? [];
 
@@ -34,6 +41,7 @@ export default function ConductPage() {
 
   const handleSave = async () => {
     if (!selStudent) { toast({ title: "Select a student first", variant: "error" }); return; }
+    if (locked) { toast({ title: "This academic task is now locked. Please contact the Admin for help.", variant: "error" }); return; }
     const records = categories.map((cat) => ({
       student:  Number(selStudent),
       category: cat.id,
@@ -63,16 +71,18 @@ export default function ConductPage() {
           </div>
           <button
             onClick={handleSave}
-            disabled={saveConduct.isPending || !selStudent}
+            disabled={saveConduct.isPending || !selStudent || locked}
             className="btn-gold flex items-center gap-2 disabled:opacity-60"
+            title={locked ? "Locked by an academic deadline" : undefined}
           >
             <Save size={15} />
-            {saveConduct.isPending ? "Saving…" : "Save Ratings"}
+            {saveConduct.isPending ? "Saving…" : locked ? "Locked" : "Save Ratings"}
           </button>
         </div>
       </div>
 
       <div className="page-content">
+        {lock && <div className="mb-5"><LockBanner window={lock} /></div>}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {/* Left — selector */}
           <div className="space-y-4">
@@ -148,7 +158,7 @@ export default function ConductPage() {
                           <button
                             key={n}
                             onClick={() => selStudent && setRating(cat.id, n as 1 | 2 | 3 | 4 | 5 | 6)}
-                            disabled={!selStudent}
+                            disabled={!selStudent || locked}
                             title={RATING_LABELS[n]}
                             className={`text-xl transition-colors leading-none disabled:cursor-not-allowed ${
                               n <= current ? "text-[#C8A84B]" : "text-[var(--surface2)] hover:text-[#E8C96A]"

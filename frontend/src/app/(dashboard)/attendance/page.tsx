@@ -2,8 +2,10 @@
 import { useState, useCallback } from "react";
 import { Save, BarChart2 } from "lucide-react";
 import { useStudents, useClasses, useSubjects, useAttendance, useSaveAttendanceBulk } from "@/hooks/useApi";
+import { useScopeLock } from "@/hooks/useScopeLock";
 import { useToast } from "@/components/ui/toaster";
 import { QueryError } from "@/components/shared/QueryError";
+import { LockBanner } from "@/components/shared/LockBanner";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { AttendanceStatus } from "@/types";
 
@@ -36,6 +38,14 @@ export default function AttendancePage() {
 
   const saveAttendance = useSaveAttendanceBulk();
 
+  // Deadline lock for the selected scope (teachers only; admins bypass).
+  const lock = useScopeLock({
+    taskTypes: ["attendance"],
+    classId: selClass ? Number(selClass) : null,
+    subjectId: selSubject ? Number(selSubject) : null,
+  });
+  const locked = !!lock;
+
   const getStatus = useCallback((studentId: number): AttendanceStatus => {
     if (drafts[studentId]) return drafts[studentId];
     const saved = savedAttendance?.results?.find((a) => a.student === studentId);
@@ -55,6 +65,10 @@ export default function AttendancePage() {
   const handleSave = async () => {
     if (!selClass || !selSubject || !selDate) {
       toast({ title: "Select class, subject and date", variant: "error" });
+      return;
+    }
+    if (locked) {
+      toast({ title: "This academic task is now locked. Please contact the Admin for help.", variant: "error" });
       return;
     }
     const records = (students?.results ?? []).map((s) => ({
@@ -89,11 +103,12 @@ export default function AttendancePage() {
             </button>
             <button
               onClick={handleSave}
-              disabled={saveAttendance.isPending || !selClass || !selSubject}
+              disabled={saveAttendance.isPending || !selClass || !selSubject || locked}
               className="btn-gold flex items-center gap-2 disabled:opacity-60"
+              title={locked ? "Locked by an academic deadline" : undefined}
             >
               <Save size={15} />
-              {saveAttendance.isPending ? "Saving…" : "Save Attendance"}
+              {saveAttendance.isPending ? "Saving…" : locked ? "Locked" : "Save Attendance"}
             </button>
           </div>
         </div>
@@ -122,6 +137,7 @@ export default function AttendancePage() {
       </div>
 
       <div className="page-content space-y-4">
+        {lock && <LockBanner window={lock} />}
         {(!selClass || !selSubject) ? (
           <div className="card flex flex-col items-center justify-center h-64 text-[#8A9ABB]">
             <div className="text-4xl mb-3">📅</div>
@@ -144,7 +160,8 @@ export default function AttendancePage() {
                 <button
                   key={s}
                   onClick={() => markAll(s)}
-                  className={`px-3 py-1 text-xs rounded border transition-colors capitalize ${STATUS_STYLES[s]}`}
+                  disabled={locked}
+                  className={`px-3 py-1 text-xs rounded border transition-colors capitalize disabled:opacity-50 disabled:cursor-not-allowed ${STATUS_STYLES[s]}`}
                 >
                   {s}
                 </button>
@@ -177,7 +194,8 @@ export default function AttendancePage() {
                                 <button
                                   key={s}
                                   onClick={() => setStudentStatus(student.id, s)}
-                                  className={`px-3 py-1.5 text-xs rounded border transition-all capitalize ${
+                                  disabled={locked}
+                                  className={`px-3 py-1.5 text-xs rounded border transition-all capitalize disabled:opacity-50 disabled:cursor-not-allowed ${
                                     status === s
                                       ? STATUS_STYLES[s]
                                       : "border-[var(--border-strong)] bg-white text-[#5A6A8A] hover:border-navy hover:text-navy"

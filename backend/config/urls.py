@@ -15,7 +15,7 @@ from apps.attendance.views import AttendanceRecordViewSet, AttendanceSummaryView
 from apps.marks.views import (
     MarkViewSet, GradingScaleViewSet, AssessmentTemplateViewSet,
     ConductCategoryViewSet, ConductRatingViewSet,
-    PromotionDecisionViewSet,
+    PromotionDecisionViewSet, AcademicTaskWindowViewSet,
 )
 from apps.finance.views import InvoiceViewSet, PaymentViewSet, ReceiptViewSet
 from apps.trash.views import TrashListView, TrashItemView, TrashRestoreView
@@ -48,6 +48,7 @@ router.register("assessment-templates", AssessmentTemplateViewSet, basename="ass
 router.register("conduct-categories", ConductCategoryViewSet,   basename="conduct-category")
 router.register("conduct-ratings",    ConductRatingViewSet,     basename="conduct-rating")
 router.register("promotions",         PromotionDecisionViewSet, basename="promotion")
+router.register("academic-task-windows", AcademicTaskWindowViewSet, basename="academic-task-window")
 
 # Finance
 router.register("invoices", InvoiceViewSet, basename="invoice")

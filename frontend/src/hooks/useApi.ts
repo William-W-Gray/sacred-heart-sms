@@ -4,8 +4,9 @@ import {
   academicYearsApi, semestersApi, attendanceApi, marksApi, conductApi,
   promotionsApi, financeApi, notificationsApi, usersApi, trashApi, snapshotsApi,
   auditApi, schoolApi, assessmentTemplatesApi, reportCardTemplateApi,
+  academicTaskWindowsApi,
   type CreateUserPayload, type AuditLogParams, type SchoolProfile,
-  type AssessmentTemplate, type ReportCardTemplate,
+  type AssessmentTemplate, type ReportCardTemplate, type AcademicTaskWindow,
 } from "@/lib/api/services";
 import { keepPreviousData } from "@tanstack/react-query";
 import type { Student, PromotionDecision } from "@/types";
@@ -32,7 +33,7 @@ export const QK = {
   attSummary:  (p?: object) => ["attendance-summary", p] as const,
   invoices:    (p?: object) => ["invoices", p] as const,
   payments:    (p?: object) => ["payments", p] as const,
-  notifications: ()         => ["notifications"] as const,
+  notifications: (p?: object) => ["notifications", p] as const,
   trash:       (p?: object) => ["trash", p] as const,
   snapshots:   (p?: object) => ["snapshots", p] as const,
   auditLogs:   (p?: object) => ["audit-logs", p] as const,
@@ -40,6 +41,7 @@ export const QK = {
   schoolProfile: ()         => ["school-profile"] as const,
   reportCardTemplate: ()    => ["report-card-template"] as const,
   assessmentTemplates: (p?: object) => ["assessment-templates", p] as const,
+  taskWindows: (p?: object) => ["academic-task-windows", p] as const,
 };
 
 // ── Students ─────────────────────────────────────────────────────
@@ -82,6 +84,19 @@ export const useDeleteStudent = () => {
   });
 };
 
+// Finance officer: place / lift an academic finance hold on a student.
+export const useSetFinanceHold = (id: number) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ hold, reason }: { hold: boolean; reason?: string }) =>
+      studentsApi.setFinanceHold(id, hold, reason ?? ""),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["students"] });
+      qc.invalidateQueries({ queryKey: QK.student(id) });
+    },
+  });
+};
+
 // ── Teachers ─────────────────────────────────────────────────────
 export const useTeachers = (params?: Record<string, unknown>, opts?: { enabled?: boolean }) =>
   useQuery({ queryKey: QK.teachers(params), queryFn: () => teachersApi.list(params), enabled: opts?.enabled ?? true });
@@ -114,8 +129,8 @@ export const useDeleteTeacher = () => {
 };
 
 // ── Guardians ────────────────────────────────────────────────────
-export const useGuardians = (params?: Record<string, unknown>) =>
-  useQuery({ queryKey: QK.guardians(params), queryFn: () => guardiansApi.list(params) });
+export const useGuardians = (params?: Record<string, unknown>, opts?: { enabled?: boolean }) =>
+  useQuery({ queryKey: QK.guardians(params), queryFn: () => guardiansApi.list(params), enabled: opts?.enabled ?? true });
 
 export const useCreateGuardian = () => {
   const qc = useQueryClient();
@@ -159,11 +174,11 @@ export const useSetGuardianStudents = () => {
 };
 
 // ── Academic structure ───────────────────────────────────────────
-export const useClasses = (params?: Record<string, unknown>) =>
-  useQuery({ queryKey: QK.classes(params), queryFn: () => classesApi.list(params) });
+export const useClasses = (params?: Record<string, unknown>, opts?: { enabled?: boolean }) =>
+  useQuery({ queryKey: QK.classes(params), queryFn: () => classesApi.list(params), enabled: opts?.enabled ?? true });
 
-export const useSubjects = () =>
-  useQuery({ queryKey: QK.subjects(), queryFn: () => subjectsApi.list() });
+export const useSubjects = (opts?: { enabled?: boolean }) =>
+  useQuery({ queryKey: QK.subjects(), queryFn: () => subjectsApi.list(), enabled: opts?.enabled ?? true });
 
 export const useAcademicYears = () =>
   useQuery({ queryKey: QK.years(), queryFn: () => academicYearsApi.list() });
@@ -285,12 +300,27 @@ export const useDeleteInvoice = () => {
 };
 
 // ── Notifications ────────────────────────────────────────────────
-export const useNotifications = () =>
+export const useNotifications = (params?: Record<string, unknown>) =>
   useQuery({
-    queryKey: QK.notifications(),
-    queryFn:  () => notificationsApi.list(),
+    queryKey: QK.notifications(params),
+    queryFn:  () => notificationsApi.list(params),
     refetchInterval: 30_000, // poll every 30 s
   });
+
+export const useUnreadCount = () =>
+  useQuery({
+    queryKey: ["notifications", "unread-count"],
+    queryFn:  () => notificationsApi.unreadCount(),
+    refetchInterval: 30_000,
+  });
+
+export const useMarkRead = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => notificationsApi.markRead(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+};
 
 export const useMarkAllRead = () => {
   const qc = useQueryClient();
@@ -463,5 +493,34 @@ export const useDeleteAssessmentTemplate = () => {
   return useMutation({
     mutationFn: (id: number) => assessmentTemplatesApi.delete(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["assessment-templates"] }),
+  });
+};
+
+// ── Academic task windows (Phase 4: admin-set deadlines) ──────────
+export const useTaskWindows = (params?: Record<string, unknown>) =>
+  useQuery({ queryKey: QK.taskWindows(params), queryFn: () => academicTaskWindowsApi.list(params) });
+
+export const useCreateTaskWindow = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Partial<AcademicTaskWindow>) => academicTaskWindowsApi.create(payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["academic-task-windows"] }),
+  });
+};
+
+export const useUpdateTaskWindow = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<AcademicTaskWindow> }) =>
+      academicTaskWindowsApi.update(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["academic-task-windows"] }),
+  });
+};
+
+export const useDeleteTaskWindow = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => academicTaskWindowsApi.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["academic-task-windows"] }),
   });
 };

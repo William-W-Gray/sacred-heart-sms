@@ -1,11 +1,13 @@
 "use client";
 import {
-  GraduationCap, Users, TrendingUp, AlertCircle, Plus,
+  GraduationCap, Users, Plus,
   BarChart2, FileText, CreditCard, CalendarDays, Star, UserCog,
 } from "lucide-react";
-import { useStudents, useTeachers, useInvoices, useAcademicYears, useSchoolProfile } from "@/hooks/useApi";
+import { useStudents, useTeachers, useInvoices, useAcademicYears, useSchoolProfile,
+  useGuardians, useClasses, useSubjects, useAttendance, useNotifications } from "@/hooks/useApi";
 import { useAuthStore } from "@/store/auth.store";
 import { QueryError } from "@/components/shared/QueryError";
+import { TeacherDeadlinesCard } from "@/components/dashboard/TeacherDeadlinesCard";
 import Link from "next/link";
 import type { UserRole } from "@/types";
 
@@ -53,7 +55,8 @@ const ALL_ACTIONS: {
   { href: "/marks",        icon: BarChart2,      label: "Enter Marks",      desc: "Record scores",      color: "bg-[var(--navy-pale)] text-navy",               roles: ["admin", "teacher"] },
   { href: "/attendance",   icon: CalendarDays,   label: "Attendance",       desc: "Daily per-subject",  color: "bg-[var(--ok-bg)] text-[var(--ok)]",            roles: ["admin", "teacher"] },
   { href: "/report-cards", icon: FileText,       label: "Report Cards",     desc: "Full PDF reports",   color: "bg-[var(--navy-pale)] text-navy",               roles: ["admin", "teacher"] },
-  { href: "/finance",      icon: CreditCard,     label: "Create Invoice",   desc: "Fee billing",        color: "bg-[#FDF0D0] text-[var(--gold-dim)]",           roles: ["admin", "finance_officer"] },
+  { href: "/finance",      icon: CreditCard,     label: "Create Invoice",   desc: "Fee billing",        color: "bg-[#FDF0D0] text-[var(--gold-dim)]",           roles: ["finance_officer"] },
+  { href: "/finance",      icon: CreditCard,     label: "Finance Overview", desc: "View invoices",      color: "bg-[#FDF0D0] text-[var(--gold-dim)]",           roles: ["admin"] },
   { href: "/finance",      icon: CreditCard,     label: "View Invoices",    desc: "Track payments",     color: "bg-[#FDF0D0] text-[var(--gold-dim)]",           roles: ["finance_officer"] },
   { href: "/conduct",      icon: Star,           label: "Conduct Ratings",  desc: "14 categories",      color: "bg-[var(--err-bg)] text-[var(--err)]",          roles: ["admin", "teacher"] },
   { href: "/users",        icon: UserCog,        label: "User Management",  desc: "Manage accounts",    color: "bg-[var(--navy-pale)] text-navy",               roles: ["admin"] },
@@ -63,40 +66,6 @@ const ALL_ACTIONS: {
   { href: "/guardians",    icon: Users,          label: "Guardians",        desc: "Parent contacts",    color: "bg-[var(--navy-pale)] text-navy",               roles: ["admin"] },
 ];
 
-function StatCard({
-  label, value, change, changeType, icon: Icon, bubble, isLoading,
-}: {
-  label: string; value: string; change?: string;
-  changeType?: "up" | "down" | "neutral"; icon: React.ElementType; bubble: string; isLoading?: boolean;
-}) {
-  return (
-    <div className="card-lift p-5">
-      <div className="flex items-start justify-between mb-4">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${bubble} shadow-md`}>
-          <Icon size={18} className="text-white" />
-        </div>
-      </div>
-      {isLoading ? (
-        <>
-          <div className="skeleton h-8 w-24 mb-2" />
-          <div className="skeleton h-3 w-32" />
-        </>
-      ) : (
-        <>
-          <p className="text-2xl font-bold text-navy font-mono leading-none">{value}</p>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted)] mt-1">{label}</p>
-          {change && (
-            <p className={`text-xs mt-2 ${
-              changeType === "up"   ? "text-[var(--ok)]"  :
-              changeType === "down" ? "text-[var(--err)]" : "text-[var(--muted)]"
-            }`}>{change}</p>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
 export default function DashboardPage() {
   const { user, role } = useAuthStore();
   const { data: school } = useSchoolProfile();
@@ -105,8 +74,11 @@ export default function DashboardPage() {
   const isAdmin          = currentRole === "admin";
   const isFinanceOfficer = currentRole === "finance_officer";
   const isTeacher        = currentRole === "teacher";
+  const isStudent        = currentRole === "student";
+  const isGuardian       = currentRole === "guardian";
   const needsFinance     = isAdmin || isFinanceOfficer;
   const needsStudents    = isAdmin || isFinanceOfficer || isTeacher;
+  const today            = new Date().toISOString().split("T")[0];
 
   const displayName  = user?.first_name || (user ? getDisplayName(user.email) : "");
   const roleLabel    = ROLE_LABEL[currentRole];
@@ -115,22 +87,35 @@ export default function DashboardPage() {
 
   // ── Role-gated API calls ──────────────────────────────────────
   // Never fetch data a role has no business seeing.
+  // Students enabled for everyone — the backend scopes it (student → own,
+  // guardian → linked children) so the banner can show role-relevant counts.
   const {
     data: students, isLoading: studentsLoading,
     isError: studentsError, refetch: refetchStudents,
-  } = useStudents(undefined, { enabled: needsStudents });
+  } = useStudents({ page_size: 500 }, { enabled: true });
 
   const {
     data: teachers, isLoading: teachersLoading,
     isError: teachersError, refetch: refetchTeachers,
   } = useTeachers(undefined, { enabled: isAdmin });
 
+  // Guardians also need their own invoices (outstanding balance metric).
   const {
     data: invoices, isLoading: invoicesLoading,
     isError: invoicesError, refetch: refetchInvoices,
-  } = useInvoices({ page_size: 1000 }, { enabled: needsFinance });
+  } = useInvoices({ page_size: 1000 }, { enabled: needsFinance || isGuardian });
 
   const { data: years, isError: yearsError, refetch: refetchYears } = useAcademicYears();
+
+  // ── Extra, role-gated data for the greeting-banner metrics ────────
+  const { data: guardians }   = useGuardians({ page_size: 1 }, { enabled: isAdmin });
+  const { data: classesData } = useClasses(undefined, { enabled: isTeacher });
+  const { data: subjectsData } = useSubjects({ enabled: isTeacher || isStudent });
+  // Today's attendance for admin/teacher; a student's own recent records for %.
+  const { data: todayAtt }    = useAttendance((isAdmin || isTeacher) ? { date: today, page_size: 300 } : undefined);
+  const { data: myAtt }       = useAttendance(isStudent ? { page_size: 300 } : undefined);
+  const { data: latestNotifs } = useNotifications({ page_size: 1 });
+  const { data: attAlerts }    = useNotifications({ module: "Attendance", is_read: false, page_size: 1 });
 
   // Only flag loading/error for queries this role actually made
   const isLoading = (needsStudents && studentsLoading) || (isAdmin && teachersLoading) || (needsFinance && invoicesLoading);
@@ -151,49 +136,69 @@ export default function DashboardPage() {
   const totalPaid     = allInvoices.reduce((s, i) => s + Number(i.amount_paid ?? 0), 0);
   const outstanding   = totalInvoiced - totalPaid;
   const collRate      = totalInvoiced > 0 ? Math.round((totalPaid / totalInvoiced) * 100) : 0;
-  const overdueCount  = allInvoices.filter((i) => i.status === "overdue").length;
 
   const currentYear = years?.results?.find((y) => y.is_current);
 
-  // ── Role-specific hero chips ──────────────────────────────────
-  const heroChips = (() => {
-    const yearChip = { icon: "📅", label: currentYear?.name ?? "2025/2026" };
-    const semChip  = { icon: "✦",  label: "Semester 2 Active" };
-    if (isAdmin)
-      return [yearChip, semChip, { icon: "👨‍🎓", label: `${totalStudents} Students Enrolled` }, { icon: "👩‍🏫", label: `${totalTeachers} Teaching Staff` }];
-    if (isFinanceOfficer)
-      return [yearChip, semChip, { icon: "👨‍🎓", label: `${totalStudents} Students` }, { icon: "💰", label: "Finance Officer" }];
-    if (isTeacher)
-      return [yearChip, semChip, { icon: "👨‍🎓", label: `${totalStudents} My Students` }, { icon: "📚", label: "Educator" }];
-    if (currentRole === "student")
-      return [yearChip, semChip, { icon: "🎓", label: "Student" }, { icon: "✝️", label: "Sacred Heart" }];
-    return [yearChip, semChip, { icon: "👨‍👩‍👧", label: "Guardian" }, { icon: "✝️", label: "Sacred Heart" }];
-  })();
+  // ── Greeting-banner metrics (role-specific, compact) ──────────
+  const fmtMoney = (n: number) => `L$${Math.round(n).toLocaleString()}`;
+  const guardianCount = guardians?.count ?? 0;
 
-  // ── Role-specific stat card definitions ───────────────────────
-  type CardDef = {
-    label: string; value: string; change: string;
-    changeType: "up" | "down" | "neutral"; icon: React.ElementType; bubble: string;
-  };
+  // finance
+  const todaysPayments = allInvoices.reduce((s, inv) =>
+    s + (inv.payments ?? [])
+          .filter((p) => String(p.payment_date ?? "").slice(0, 10) === today)
+          .reduce((a, p) => a + Number(p.amount), 0), 0);
+  const pendingInvoices = allInvoices.filter((i) => i.status !== "paid").length;
 
-  const statCards: CardDef[] = (() => {
+  // teacher
+  const assignedClasses = classesData?.count ?? 0;
+  const markedToday = new Set((todayAtt?.results ?? []).map((a) => a.class_group)).size;
+  const pendingAttendance = Math.max(0, assignedClasses - markedToday);
+
+  // student
+  const studentClass = students?.results?.[0]?.class_name ?? "—";
+  const myAttRecords = myAtt?.results ?? [];
+  const studentPresent = myAttRecords.filter((a) => a.status === "present").length;
+  const studentAttPct = myAttRecords.length ? `${Math.round((studentPresent / myAttRecords.length) * 100)}%` : "—";
+
+  // guardian
+  const latestNotifTitle = latestNotifs?.results?.[0]?.title ?? "None yet";
+  const attentionCount = attAlerts?.count ?? 0;
+
+  type Metric = { label: string; value: string };
+  const bannerMetrics: Metric[] = (() => {
     if (isAdmin) return [
-      { label: "Total Students", value: String(totalStudents), change: "Active enrolments",       changeType: "neutral", icon: GraduationCap, bubble: "bg-gradient-to-br from-[#C8A84B] to-[#8B6F2A]" },
-      { label: "Teaching Staff", value: String(totalTeachers), change: "Across all departments",  changeType: "neutral", icon: Users,         bubble: "bg-gradient-to-br from-[#1A2A4A] to-[#2A3F6A]" },
-      { label: "Fee Collection", value: `${collRate}%`,        change: `L$${totalPaid.toLocaleString()} collected`, changeType: "up", icon: TrendingUp, bubble: "bg-gradient-to-br from-[#1B6B3A] to-[#2A9D5C]" },
-      { label: "Outstanding",    value: `L$${outstanding.toLocaleString()}`, change: `${overdueCount} overdue ${overdueCount === 1 ? "invoice" : "invoices"}`, changeType: overdueCount > 0 ? "down" : "neutral", icon: AlertCircle, bubble: "bg-gradient-to-br from-[#8B1A1A] to-[#C42B2B]" },
+      { label: "Students",     value: String(totalStudents) },
+      { label: "Teachers",     value: String(totalTeachers) },
+      { label: "Guardians",    value: String(guardianCount) },
+      { label: "Marked Today", value: String(todayAtt?.count ?? 0) },
     ];
     if (isFinanceOfficer) return [
-      { label: "Total Students",   value: String(totalStudents),            change: "For billing purposes",     changeType: "neutral", icon: GraduationCap, bubble: "bg-gradient-to-br from-[#C8A84B] to-[#8B6F2A]" },
-      { label: "Fees Collected",   value: `L$${totalPaid.toLocaleString()}`, change: `${collRate}% collection rate`, changeType: "up", icon: TrendingUp, bubble: "bg-gradient-to-br from-[#1B6B3A] to-[#2A9D5C]" },
-      { label: "Outstanding Fees", value: `L$${outstanding.toLocaleString()}`, change: "Pending collection",   changeType: outstanding > 0 ? "down" : "neutral", icon: AlertCircle, bubble: "bg-gradient-to-br from-[#8B1A1A] to-[#C42B2B]" },
-      { label: "Overdue Invoices", value: String(overdueCount),             change: overdueCount > 0 ? "Require follow-up" : "None overdue", changeType: overdueCount > 0 ? "down" : "neutral", icon: AlertCircle, bubble: "bg-gradient-to-br from-[#7A3A1A] to-[#B85A2B]" },
+      { label: "Outstanding",      value: fmtMoney(outstanding) },
+      { label: "Today's Payments", value: fmtMoney(todaysPayments) },
+      { label: "Pending Invoices", value: String(pendingInvoices) },
+      { label: "Collection",       value: `${collRate}%` },
     ];
     if (isTeacher) return [
-      { label: "My Students", value: String(totalStudents), change: "In your assigned classes", changeType: "neutral", icon: GraduationCap, bubble: "bg-gradient-to-br from-[#C8A84B] to-[#8B6F2A]" },
+      { label: "My Classes",         value: String(assignedClasses) },
+      { label: "My Students",        value: String(totalStudents) },
+      { label: "Pending Attendance", value: String(pendingAttendance) },
+      { label: "Marked Today",       value: String(markedToday) },
     ];
-    return []; // student / guardian — no numeric stats
+    if (isStudent) return [
+      { label: "Class",        value: studentClass },
+      { label: "Subjects",     value: String(subjectsData?.count ?? 0) },
+      { label: "Attendance",   value: studentAttPct },
+      { label: "Present Days", value: String(studentPresent) },
+    ];
+    return [ // guardian
+      { label: "Children",    value: String(totalStudents) },
+      { label: "Outstanding", value: fmtMoney(outstanding) },
+      { label: "Att. Alerts", value: String(attentionCount) },
+      { label: "Latest",      value: latestNotifTitle },
+    ];
   })();
+
 
   const showFinancePanel = needsFinance;
 
@@ -268,36 +273,27 @@ export default function DashboardPage() {
             <p className="text-[rgba(255,255,255,0.5)] text-sm mt-2 font-light italic">
               &ldquo;Ora et Labora&rdquo; · Faith, Excellence &amp; Service · Monrovia, Liberia
             </p>
-            <div className="flex flex-wrap gap-2 mt-5">
-              {heroChips.map((chip) => (
-                <span
-                  key={chip.label}
-                  className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[rgba(255,255,255,0.75)] bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] px-3 py-1.5 rounded-full backdrop-blur-sm"
-                >
-                  <span className="opacity-70">{chip.icon}</span> {chip.label}
-                </span>
+            {/* Compact role-specific metrics — fills the banner meaningfully */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-6">
+              {bannerMetrics.map((m) => (
+                <div key={m.label} className="rounded-xl bg-[rgba(255,255,255,0.07)] border border-[rgba(255,255,255,0.12)] px-3.5 py-3 backdrop-blur-sm min-w-0">
+                  <p className="text-white font-bold text-lg leading-tight truncate" title={m.value}>
+                    {isLoading ? "…" : m.value}
+                  </p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[rgba(255,255,255,0.55)] mt-0.5 truncate">{m.label}</p>
+                </div>
               ))}
             </div>
+            <p className="text-[11px] text-[rgba(255,255,255,0.4)] mt-3">
+              {currentYear?.name ?? "2025/2026"} · Semester 2 Active
+            </p>
           </div>
         </div>
 
-        {/* Stat cards — only shown when there is something role-relevant to display */}
-        {statCards.length > 0 && (
-          hasError ? (
-            <div className="card">
-              <QueryError resource="dashboard data" onRetry={retryAll} />
-            </div>
-          ) : (
-            <div className={`grid gap-4 ${
-              statCards.length === 4 ? "grid-cols-2 lg:grid-cols-4" :
-              statCards.length === 2 ? "grid-cols-1 sm:grid-cols-2"  :
-              "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-            }`}>
-              {statCards.map((c) => (
-                <StatCard key={c.label} {...c} isLoading={isLoading} />
-              ))}
-            </div>
-          )
+        {hasError && (
+          <div className="card">
+            <QueryError resource="dashboard data" onRetry={retryAll} />
+          </div>
         )}
 
         {/* Bottom section — layout adapts to whether Finance panel is shown */}
@@ -375,6 +371,9 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+
+        {/* Teacher: active academic tasks & deadline countdowns (Phase 4) */}
+        {isTeacher && <TeacherDeadlinesCard />}
       </div>
     </>
   );

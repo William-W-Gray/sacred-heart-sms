@@ -4,14 +4,16 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import {
-  ArrowLeft, Pencil, FileText, Phone, Mail, Users, Star, CalendarDays,
+  ArrowLeft, Pencil, FileText, Phone, Mail, Users, Star, CalendarDays, Lock,
 } from "lucide-react";
-import { useStudent, useReportCard } from "@/hooks/useApi";
+import { useStudent, useReportCard, useSetFinanceHold } from "@/hooks/useApi";
 import { useAuthStore } from "@/store/auth.store";
 import { StudentModal } from "@/components/forms/StudentModal";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { GradeCell, GradeBadge } from "@/components/shared/GradeCell";
 import { QueryError } from "@/components/shared/QueryError";
+import { useToast } from "@/components/ui/toaster";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 
 function pct(part: number | null, total: number | null): string {
   if (!total || part === null) return "—";
@@ -24,8 +26,21 @@ export default function StudentProfilePage() {
   const id = Number(params.id);
   const { role } = useAuthStore();
   const canEdit = role === "admin";
+  const isFinance = role === "finance_officer";
+  const { toast } = useToast();
 
   const [editOpen, setEditOpen] = useState(false);
+  const [holdReason, setHoldReason] = useState("");
+  const setHold = useSetFinanceHold(id);
+
+  const placeHold = async () => {
+    try { await setHold.mutateAsync({ hold: true, reason: holdReason }); toast({ title: "Academic hold placed", variant: "success" }); setHoldReason(""); }
+    catch (err) { toast({ title: getApiErrorMessage(err, "Failed to place hold"), variant: "error" }); }
+  };
+  const liftHold = async () => {
+    try { await setHold.mutateAsync({ hold: false }); toast({ title: "Academic hold lifted", variant: "success" }); }
+    catch (err) { toast({ title: getApiErrorMessage(err, "Failed to lift hold"), variant: "error" }); }
+  };
 
   const { data: student, isLoading, isError, refetch } = useStudent(id);
   // Report card carries the live academic summary (marks, attendance, rank).
@@ -94,6 +109,41 @@ export default function StudentProfilePage() {
       </div>
 
       <div className="page-content space-y-5">
+        {/* Finance hold — status to all staff; toggle for finance officers only */}
+        {(student.finance_hold || isFinance) && (
+          <div className={`card p-5 ${student.finance_hold ? "border-[var(--err-border)] bg-[var(--err-bg)]" : ""}`}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <Lock size={18} className={`mt-0.5 flex-shrink-0 ${student.finance_hold ? "text-[var(--err)]" : "text-[var(--muted)]"}`} />
+                <div>
+                  <p className={`text-sm font-semibold ${student.finance_hold ? "text-[var(--err)]" : "text-navy"}`}>
+                    {student.finance_hold ? "Academic hold active" : "No academic hold"}
+                  </p>
+                  <p className="text-xs text-[#5A6A8A] mt-0.5">
+                    {student.finance_hold
+                      ? `${student.finance_hold_reason || "Outstanding balance"}${student.finance_hold_by_name ? ` · placed by ${student.finance_hold_by_name}` : ""}. Report cards & results are blocked for the student and their guardians.`
+                      : "Report cards & results are visible to the student and guardians."}
+                  </p>
+                </div>
+              </div>
+              {isFinance && (
+                student.finance_hold ? (
+                  <button onClick={liftHold} disabled={setHold.isPending} className="btn-outline text-sm whitespace-nowrap disabled:opacity-60">
+                    {setHold.isPending ? "Working…" : "Lift hold"}
+                  </button>
+                ) : (
+                  <div className="flex gap-2 items-center flex-shrink-0">
+                    <input value={holdReason} onChange={(e) => setHoldReason(e.target.value)} placeholder="Reason (optional)" className="form-input text-sm w-44" maxLength={255} />
+                    <button onClick={placeHold} disabled={setHold.isPending} className="btn-gold text-sm whitespace-nowrap disabled:opacity-60">
+                      {setHold.isPending ? "Working…" : "Place hold"}
+                    </button>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* Identity card */}
           <div className="card p-6 lg:col-span-1">
