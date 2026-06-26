@@ -106,28 +106,48 @@ class Notification(models.Model):
         EMAIL    = "email",    "Email"
         WHATSAPP = "whatsapp", "WhatsApp"
 
+    class Priority(models.TextChoices):
+        LOW    = "low",    "Low"
+        NORMAL = "normal", "Normal"
+        HIGH   = "high",   "High"
+        URGENT = "urgent", "Urgent"
+
     recipient         = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
     notification_type = models.CharField(max_length=30, choices=Type.choices)
     channel           = models.CharField(max_length=20, choices=Channel.choices, default=Channel.IN_APP)
+    priority          = models.CharField(max_length=10, choices=Priority.choices, default=Priority.NORMAL, db_index=True)
+    # Denormalised copy of the recipient's role at send time, so role-filtered
+    # queries / analytics survive a later role change or account deletion.
+    recipient_role    = models.CharField(max_length=30, blank=True, db_index=True)
     title             = models.CharField(max_length=200)
     body              = models.TextField()
+    module            = models.CharField(max_length=50, blank=True, db_index=True)   # "Attendance", "Marks", "Finance"…
+    action_type       = models.CharField(max_length=50, blank=True)                  # "attendance_marked", "payment_recorded"…
+    related_object_id = models.CharField(max_length=64, blank=True)                  # e.g. the invoice/mark id the notice is about
     is_read           = models.BooleanField(default=False)
     metadata          = models.JSONField(default=dict, blank=True)
     created_at        = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
+        indexes  = [models.Index(fields=["recipient", "is_read"])]
 
     def __str__(self) -> str:
         return f"[{self.channel}] {self.title} → {self.recipient.email}"
 
     @classmethod
     def send(cls, *, recipient: User, type: str, title: str, body: str,
-             channel: str = Channel.IN_APP, metadata: dict = None):
+             channel: str = Channel.IN_APP, metadata: dict = None,
+             priority: str = None, module: str = "", action_type: str = "",
+             related_object_id="" ):
         notif = cls.objects.create(
             recipient=recipient, notification_type=type,
             channel=channel, title=title, body=body,
             metadata=metadata or {},
+            priority=priority or cls.Priority.NORMAL,
+            recipient_role=getattr(recipient, "role", "") or "",
+            module=module, action_type=action_type,
+            related_object_id=str(related_object_id or ""),
         )
         if channel == cls.Channel.EMAIL:
             from django.conf import settings as django_settings

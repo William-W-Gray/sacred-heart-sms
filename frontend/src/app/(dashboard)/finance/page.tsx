@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Plus, Receipt, Trash2, CreditCard } from "lucide-react";
 import { useInvoices, useCreateInvoice, useCreatePayment, useDeleteInvoice, useStudents } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
+import { useAuthStore } from "@/store/auth.store";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { QueryError } from "@/components/shared/QueryError";
 import { getApiErrorMessage } from "@/lib/utils/errors";
@@ -133,6 +134,9 @@ export default function FinancePage() {
   const [invoiceOpen, setInvOpen] = useState(false);
   const [payInvoice, setPayInv]   = useState<Invoice | null>(null);
   const { toast } = useToast();
+  const { role } = useAuthStore();
+  // Data entry is finance-officer only; admins are view-only (separation of duties).
+  const canWrite = role === "finance_officer";
 
   const { data, isLoading, isError, refetch } = useInvoices({ page, page_size: 20 });
   const deleteInvoice = useDeleteInvoice();
@@ -160,7 +164,11 @@ export default function FinancePage() {
             <h1 className="text-2xl font-semibold text-navy font-serif">Finance Management</h1>
             <p className="text-sm text-[#5A6A8A] mt-0.5">Invoices, payments &amp; receipts</p>
           </div>
-          <button onClick={() => setInvOpen(true)} className="btn-gold flex items-center gap-2"><Plus size={15} /> Create Invoice</button>
+          {canWrite ? (
+            <button onClick={() => setInvOpen(true)} className="btn-gold flex items-center gap-2"><Plus size={15} /> Create Invoice</button>
+          ) : (
+            <span className="text-[11px] font-medium text-[var(--muted)] border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 rounded-full">View only · finance officer manages entries</span>
+          )}
         </div>
       </div>
 
@@ -217,7 +225,7 @@ export default function FinancePage() {
                         <td className="px-4 py-3"><StatusBadge status={inv.status} /></td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1">
-                            {balance > 0 && (
+                            {canWrite && balance > 0 && (
                               <button onClick={() => setPayInv(inv)} className="flex items-center gap-1 px-2.5 py-1.5 rounded text-xs bg-[var(--gold)] text-navy-deep hover:bg-[var(--gold-light)] transition-colors font-medium">
                                 <CreditCard size={12} /> Pay
                               </button>
@@ -225,9 +233,11 @@ export default function FinancePage() {
                             <button className="p-1.5 rounded hover:bg-[var(--surface2)] text-[#5A6A8A] hover:text-navy transition-colors" title="Receipt">
                               <Receipt size={14} />
                             </button>
-                            <button onClick={() => handleDelete(inv.id)} className="p-1.5 rounded hover:bg-[var(--err-bg)] text-[#5A6A8A] hover:text-[var(--err)] transition-colors" title="Delete">
-                              <Trash2 size={14} />
-                            </button>
+                            {canWrite && (
+                              <button onClick={() => handleDelete(inv.id)} className="p-1.5 rounded hover:bg-[var(--err-bg)] text-[#5A6A8A] hover:text-[var(--err)] transition-colors" title="Delete">
+                                <Trash2 size={14} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

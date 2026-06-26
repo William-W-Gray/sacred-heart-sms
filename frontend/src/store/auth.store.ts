@@ -1,7 +1,7 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import { jwtDecode } from "jwt-decode";
-import { setTokens, clearTokens } from "@/lib/api/client";
+import { setTokens, clearTokens, getRefreshToken } from "@/lib/api/client";
 import { authApi } from "@/lib/api/services";
 import { getApiErrorMessage, isNetworkError, withRetry } from "@/lib/utils/errors";
 import type { AuthUser, JWTPayload, UserRole } from "@/types";
@@ -56,8 +56,7 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         try {
-          const { default: Cookies } = await import("js-cookie");
-          const refresh = Cookies.get("sms_refresh");
+          const refresh = getRefreshToken();
           if (refresh) await authApi.logout(refresh);
         } finally {
           clearTokens();
@@ -88,6 +87,11 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "sms-auth",
+      // sessionStorage (per-tab), to match the token storage in client.ts —
+      // using localStorage here would re-share the auth flag/role across
+      // tabs and reopen the session-bleed bug even though the tokens are
+      // isolated. Survives same-tab refresh; a new tab starts logged out.
+      storage: createJSONStorage(() => sessionStorage),
       // Only persist the boolean auth flag and role — never the user object
       // (which contains email and PII). The user profile is re-fetched via
       // fetchMe() when the layout mounts after a page refresh.

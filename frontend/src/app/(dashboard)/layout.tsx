@@ -6,12 +6,12 @@ import {
   LayoutDashboard, GraduationCap, Users, UserCheck,
   CalendarDays, BarChart2, Star, Trophy, FileText,
   CreditCard, School, Settings, Bell, LogOut, ChevronRight, ChevronLeft,
-  Menu, X, UserCog, Trash2, Archive, ScrollText,
+  ChevronDown, Menu, X, UserCog, Trash2, Archive, ScrollText, Timer,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
-import { useNotifications } from "@/hooks/useApi";
 import { cn } from "@/lib/utils/cn";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
+import { NotificationBell } from "@/components/shared/NotificationBell";
 import type { UserRole } from "@/types";
 
 type NavItem = { href: string; icon: React.ElementType; label: string; roles?: UserRole[] };
@@ -19,11 +19,15 @@ type NavSection = { label: string; items: NavItem[]; roles?: UserRole[] };
 
 const NAV: NavSection[] = [
   { label: "Overview", items: [
-    { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { href: "/dashboard",     icon: LayoutDashboard, label: "Dashboard" },
+    { href: "/notifications", icon: Bell,            label: "Notifications" },
   ]},
   { label: "People", roles: ["admin", "teacher", "finance_officer"], items: [
     { href: "/students",  icon: GraduationCap, label: "Students" },
-    { href: "/teachers",  icon: UserCheck,     label: "Teachers", roles: ["admin", "teacher"] },
+    // Teacher Management is admin-only per spec — teachers must not see it
+    // (overrides the older "world-readable staff directory" posture). The
+    // backend already 403s teacher writes; this hides the menu entry too.
+    { href: "/teachers",  icon: UserCheck,     label: "Teachers", roles: ["admin"] },
     { href: "/guardians", icon: Users,          label: "Guardians", roles: ["admin"] },
   ]},
   { label: "Academic", roles: ["admin", "teacher"], items: [
@@ -35,7 +39,7 @@ const NAV: NavSection[] = [
     // anything anyway, so don't show them a page that only half-works.
     { href: "/promotion",   icon: Trophy,       label: "Promotion", roles: ["admin"] },
   ]},
-  { label: "Reports", items: [
+  { label: "Reports", roles: ["admin", "teacher", "student", "guardian"], items: [
     { href: "/report-cards", icon: FileText, label: "Report Cards" },
   ]},
   { label: "Finance", roles: ["admin", "finance_officer"], items: [
@@ -44,6 +48,7 @@ const NAV: NavSection[] = [
   { label: "Admin", roles: ["admin"], items: [
     { href: "/users",     icon: UserCog,    label: "User Management" },
     { href: "/classes",   icon: School,     label: "Classes & Subjects" },
+    { href: "/deadlines", icon: Timer,      label: "Academic Deadlines" },
     { href: "/audit",     icon: ScrollText, label: "Audit Trail" },
     { href: "/trash",     icon: Trash2,     label: "Trash" },
     { href: "/snapshots", icon: Archive,    label: "Snapshots" },
@@ -55,7 +60,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router   = useRouter();
   const pathname = usePathname();
   const { user, role, isAuthenticated, logout, fetchMe, hasHydrated } = useAuthStore();
-  const { data: notifData } = useNotifications();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // Desktop-only icons-only mode (mobile always shows the full drawer when
   // open — collapsing it there wouldn't save anything, the drawer is
@@ -70,7 +74,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     localStorage.setItem("sms-sidebar-collapsed", String(collapsed));
   }, [collapsed]);
 
-  const unreadCount = notifData?.results?.filter((n) => !n.is_read).length ?? 0;
+  // Per-category collapse/expand. Stored in localStorage (a UI preference,
+  // unlike auth — sharing it across tabs is harmless and expected). A section
+  // missing from the map defaults to open, so first-time users see everything.
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      return JSON.parse(localStorage.getItem("sms-sidebar-sections") || "{}");
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    localStorage.setItem("sms-sidebar-sections", JSON.stringify(openSections));
+  }, [openSections]);
+  const toggleSection = (label: string) =>
+    setOpenSections((s) => ({ ...s, [label]: !(s[label] ?? true) }));
 
   useEffect(() => {
     // Wait for the persisted auth flag to rehydrate from localStorage —
@@ -200,12 +219,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-5">
-          {NAV.filter((s) => !s.roles || (role && s.roles.includes(role as UserRole))).map((section) => (
+          {NAV.filter((s) => !s.roles || (role && s.roles.includes(role as UserRole))).map((section) => {
+            const isOpen = openSections[section.label] ?? true;
+            return (
             <div key={section.label}>
-              <p className={cn("text-[11px] font-semibold tracking-widest text-[var(--muted)] uppercase px-2 mb-1.5", collapsed && "lg:hidden")}>
-                {section.label}
-              </p>
-              <div className="space-y-0.5">
+              {/* Category header doubles as a collapse toggle. Hidden in the
+                  desktop icon-only mode (there's no header to expand there).
+                  On mobile the full drawer always shows it, so category
+                  collapse works regardless of the desktop icon mode. */}
+              <button
+                type="button"
+                onClick={() => toggleSection(section.label)}
+                aria-expanded={isOpen}
+                className={cn(
+                  "w-full flex items-center justify-between px-2 mb-1.5 group/section rounded-md hover:bg-white/60 transition-colors",
+                  collapsed && "lg:hidden",
+                )}
+              >
+                <span className="text-[11px] font-semibold tracking-widest text-[var(--muted)] uppercase">
+                  {section.label}
+                </span>
+                <ChevronDown
+                  size={12}
+                  className={cn(
+                    "text-[var(--muted)] transition-transform duration-200 group-hover/section:text-navy",
+                    !isOpen && "-rotate-90",
+                  )}
+                />
+              </button>
+              {/* Items: hidden when the category is collapsed, EXCEPT in the
+                  desktop icon-only mode where headers are gone and icons must
+                  always show (hence the lg:block override). */}
+              <div className={cn("space-y-0.5", !isOpen && "hidden", !isOpen && collapsed && "lg:block")}>
                 {section.items
                   .filter((item) => !item.roles || (role && item.roles.includes(role as UserRole)))
                   .map((item) => {
@@ -230,7 +275,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 })}
               </div>
             </div>
-          ))}
+            );
+          })}
         </nav>
 
         {/* Footer */}
@@ -291,18 +337,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </span>
           </div>
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-            {/* Notification bell */}
-            <button
-              className="relative p-[13px] -m-[13px] rounded-lg text-[rgba(255,255,255,0.6)] hover:bg-[rgba(255,255,255,0.08)] hover:text-white transition-colors"
-              aria-label="Notifications"
-            >
-              <Bell size={18} />
-              {unreadCount > 0 && (
-                <span className="absolute top-[9px] right-[9px] w-4 h-4 bg-crimson-light rounded-full text-[9px] font-bold text-white flex items-center justify-center">
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </span>
-              )}
-            </button>
+            {/* Notification bell + dropdown */}
+            <NotificationBell />
             {/* Role badge */}
             <span className="hidden sm:inline-flex text-[11px] font-medium text-gold-light border border-[rgba(200,168,75,0.3)] bg-[rgba(200,168,75,0.1)] px-2.5 py-1 rounded-full uppercase tracking-wider">
               {role}

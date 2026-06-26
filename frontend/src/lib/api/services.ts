@@ -111,6 +111,8 @@ export const studentsApi = {
     }).then((r) => r.data),
   delete:     (id: number) => del(`/api/students/${id}/`),
   reportCard: (id: number) => one<ReportCard>(`/api/students/${id}/report_card/`),
+  setFinanceHold: (id: number, finance_hold: boolean, reason = "") =>
+    api.post(`/api/students/${id}/finance-hold/`, { finance_hold, reason }).then((r) => r.data),
 };
 
 // ── Guardians ────────────────────────────────────────────────────
@@ -203,8 +205,9 @@ export const financeApi = {
 
 // ── Notifications ────────────────────────────────────────────────
 export const notificationsApi = {
-  list:       (p?: Record<string, unknown>) => list<Notification>("/api/notifications/", p),
-  markRead:   (id: number) => api.post(`/api/notifications/${id}/read/`),
+  list:        (p?: Record<string, unknown>) => list<Notification>("/api/notifications/", p),
+  unreadCount: () => api.get<{ count: number }>("/api/notifications/unread-count/").then((r) => r.data),
+  markRead:    (id: number) => api.post(`/api/notifications/${id}/read/`),
   markAllRead: () => api.post("/api/notifications/read-all/"),
 };
 
@@ -325,6 +328,38 @@ export const assessmentTemplatesApi = {
   create: (d: Partial<AssessmentTemplate>) => create<AssessmentTemplate>("/api/assessment-templates/", d),
   update: (id: number, d: Partial<AssessmentTemplate>) => update<AssessmentTemplate>(`/api/assessment-templates/${id}/`, d),
   delete: (id: number) => del(`/api/assessment-templates/${id}/`),
+};
+
+// ── Academic task windows (Phase 4: admin-set deadlines) ─────────
+export type TaskType = "attendance" | "assignment" | "quiz" | "test" | "exam" | "conduct" | "report_comment";
+export type WindowStatus = "auto" | "open" | "closed" | "readonly";
+export interface AcademicTaskWindow {
+  id: number;
+  task_type: TaskType;
+  task_type_display: string;
+  academic_year: number;
+  semester: number | null;
+  assigned_class: number | null;
+  class_name: string | null;
+  subject: number | null;
+  subject_name: string | null;
+  teacher: number | null;
+  teacher_name: string | null;
+  open_at: string | null;
+  close_at: string | null;
+  status: WindowStatus;
+  status_display: string;
+  effective_status: "open" | "closed" | "readonly";
+  is_editable_now: boolean;
+  note: string;
+  created_at: string;
+  updated_at: string;
+}
+export const academicTaskWindowsApi = {
+  list:   (p?: Record<string, unknown>) => list<AcademicTaskWindow>("/api/academic-task-windows/", p),
+  create: (d: Partial<AcademicTaskWindow>) => create<AcademicTaskWindow>("/api/academic-task-windows/", d),
+  update: (id: number, d: Partial<AcademicTaskWindow>) => update<AcademicTaskWindow>(`/api/academic-task-windows/${id}/`, d),
+  delete: (id: number) => del(`/api/academic-task-windows/${id}/`),
 };
 
 // ── Report card template (singleton settings) ────────────────────

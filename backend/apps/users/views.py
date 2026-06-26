@@ -2,6 +2,8 @@ from rest_framework import serializers, viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
+import django_filters
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenBlacklistView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -10,6 +12,7 @@ from apps.audit.mixins import AuditLogMixin
 from apps.audit.models import AuditAction
 from apps.audit.services import log_action
 from .models import User, Notification
+from .password_validation import validate_password_strength
 
 
 # ── JWT with role in payload ────────────────────────────────────
@@ -243,7 +246,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=8)
+    password = serializers.CharField(write_only=True)
 
     # Profile fields for create/update
     student_id = serializers.CharField(required=False, write_only=True, allow_blank=True)
@@ -297,6 +300,19 @@ class UserCreateSerializer(serializers.ModelSerializer):
             if qs.exists():
                 raise serializers.ValidationError("A teacher with this Employee ID already exists.")
         return value
+
+    def validate(self, attrs):
+        password = attrs.get("password")
+        if password:
+            validate_password_strength(
+                password,
+                field="password",
+                email=attrs.get("email"),
+                first_name=attrs.get("first_name"),
+                last_name=attrs.get("last_name"),
+                student_id=attrs.get("student_id"),
+            )
+        return attrs
 
     def create(self, validated_data: dict) -> User:
         from django.db import transaction
@@ -411,7 +427,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
 class ChangePasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField()
-    new_password = serializers.CharField(min_length=8)
+    new_password = serializers.CharField()
 
     def validate_old_password(self, value: str) -> str:
         user: User = self.context["request"].user
@@ -419,12 +435,26 @@ class ChangePasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError("Old password is incorrect.")
         return value
 
+    def validate(self, attrs):
+        user: User = self.context["request"].user
+        sid = getattr(getattr(user, "student_profile", None), "student_id", None)
+        validate_password_strength(
+            attrs.get("new_password"),
+            field="new_password",
+            email=user.email,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            student_id=sid,
+        )
+        return attrs
+
 
 # ── Notification serializer ─────────────────────────────────────
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Notification
-        fields = ["id", "notification_type", "channel", "title", "body",
+        fields = ["id", "notification_type", "channel", "priority", "recipient_role",
+                  "title", "body", "module", "action_type", "related_object_id",
                   "is_read", "metadata", "created_at"]
 
 
@@ -461,9 +491,15 @@ class UserViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
         """Admin: force-set a user's password without knowing the old one."""
         user = self.get_object()
         new_password = request.data.get("password", "")
-        if len(new_password) < 8:
-            from rest_framework.exceptions import ValidationError
-            raise ValidationError({"password": "Password must be at least 8 characters."})
+        sid = getattr(getattr(user, "student_profile", None), "student_id", None)
+        validate_password_strength(
+            new_password,
+            field="password",
+            email=user.email,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            student_id=sid,
+        )
         user.set_password(new_password)
         user.save(update_fields=["password"])
         log_action(
@@ -489,12 +525,29 @@ class UserViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
         return Response({"detail": "Password updated successfully."})
 
 
+class NotificationFilter(django_filters.FilterSet):
+    date_from = django_filters.DateFilter(field_name="created_at", lookup_expr="date__gte")
+    date_to   = django_filters.DateFilter(field_name="created_at", lookup_expr="date__lte")
+
+    class Meta:
+        model  = Notification
+        fields = ["is_read", "module", "priority", "notification_type"]
+
+
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class   = NotificationSerializer
     permission_classes = [permissions.IsAuthenticated]
+    filter_backends    = [DjangoFilterBackend]
+    filterset_class    = NotificationFilter
 
     def get_queryset(self):
+        # A user only ever sees their own notifications.
         return Notification.objects.filter(recipient=self.request.user)
+
+    @action(detail=False, methods=["get"], url_path="unread-count")
+    def unread_count(self, request):
+        count = Notification.objects.filter(recipient=request.user, is_read=False).count()
+        return Response({"count": count})
 
     @action(detail=True, methods=["post"], url_path="read")
     def mark_read(self, request, pk=None):
@@ -519,6 +572,14 @@ class IsAdminOrFinanceOfficer(permissions.BasePermission):
     def has_permission(self, request, view) -> bool:
         return bool(request.user and request.user.is_authenticated
                     and request.user.role in ("admin", "finance_officer"))
+
+
+class IsFinanceOfficer(permissions.BasePermission):
+    """Financial data entry is the finance officer's job alone — admins are
+    view-only on finance (separation of duties)."""
+    def has_permission(self, request, view) -> bool:
+        return bool(request.user and request.user.is_authenticated
+                    and request.user.role == "finance_officer")
 
 
 class IsAdminOrTeacher(permissions.BasePermission):

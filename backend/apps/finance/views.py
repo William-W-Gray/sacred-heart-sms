@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import Invoice, Payment, Receipt
-from apps.users.views import IsAdminUser, IsAdminOrFinanceOfficer, scope_to_own_student
+from apps.users.views import IsAdminUser, IsAdminOrFinanceOfficer, IsFinanceOfficer, scope_to_own_student
 from apps.trash.mixins import SoftDeleteViewSetMixin
 from apps.audit.mixins import AuditLogMixin
 from apps.audit.models import AuditAction
@@ -77,8 +77,10 @@ class InvoiceViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSe
                                     prefix="student", teacher_sees_classes=False)
 
     def get_permissions(self):
+        # Data entry is finance-officer only; admins are view-only (they still
+        # read everything via get_queryset, but cannot create/edit/delete).
         if self.action in ("create", "update", "partial_update", "destroy"):
-            return [permissions.IsAuthenticated(), IsAdminOrFinanceOfficer()]
+            return [permissions.IsAuthenticated(), IsFinanceOfficer()]
         return [permissions.IsAuthenticated()]
 
 
@@ -97,8 +99,10 @@ class PaymentViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
                                     prefix="invoice__student", teacher_sees_classes=False)
 
     def get_permissions(self):
+        # Data entry is finance-officer only; admins are view-only (they still
+        # read everything via get_queryset, but cannot create/edit/delete).
         if self.action in ("create", "update", "partial_update", "destroy"):
-            return [permissions.IsAuthenticated(), IsAdminOrFinanceOfficer()]
+            return [permissions.IsAuthenticated(), IsFinanceOfficer()]
         return [permissions.IsAuthenticated()]
 
     def perform_create(self, serializer):
@@ -109,6 +113,12 @@ class PaymentViewSet(SoftDeleteViewSetMixin, viewsets.ModelViewSet):
             obj=payment, description=f"Recorded payment: {payment}",
             new_value=serialize_instance(payment),
         )
+        try:
+            from apps.notifications.services import notify_payment_recorded
+            notify_payment_recorded(payment)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Failed to send payment notifications")
 
     def perform_update(self, serializer):
         old_value = serialize_instance(serializer.instance) if serializer.instance else None

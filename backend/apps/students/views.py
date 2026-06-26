@@ -1,14 +1,15 @@
-from rest_framework import serializers, viewsets, permissions, filters
+from rest_framework import serializers, viewsets, permissions, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import transaction
 
 from .models import Student, Guardian, StudentGuardian, Class, Subject, AcademicYear, Semester
-from apps.users.views import IsAdminUser
+from apps.users.views import IsAdminUser, IsFinanceOfficer
 from apps.trash.mixins import SoftDeleteViewSetMixin
 from apps.audit.mixins import AuditLogMixin
 from apps.audit.models import AuditAction
+from apps.audit.services import log_action
 
 
 # ── Academic year / semester ────────────────────────────────────
@@ -79,7 +80,8 @@ class StudentListSerializer(serializers.ModelSerializer):
         model  = Student
         fields = ["id", "student_id", "first_name", "middle_name", "last_name",
                   "full_name", "gender", "date_of_birth", "photo",
-                  "current_class", "class_name", "status", "enrolled_at"]
+                  "current_class", "class_name", "status", "enrolled_at",
+                  "finance_hold"]
 
     def get_class_name(self, obj) -> str | None:
         return str(obj.current_class) if obj.current_class else None
@@ -89,14 +91,23 @@ class StudentDetailSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField()
     guardians = serializers.SerializerMethodField()
     current_class_detail = ClassSerializer(source="current_class", read_only=True)
+    finance_hold_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model  = Student
         fields = ["id", "student_id", "first_name", "middle_name", "last_name",
                   "full_name", "gender", "date_of_birth", "photo",
                   "current_class", "current_class_detail", "status",
-                  "enrolled_at", "updated_at", "guardians"]
-        read_only_fields = ["enrolled_at", "updated_at"]
+                  "enrolled_at", "updated_at", "guardians",
+                  "finance_hold", "finance_hold_reason", "finance_hold_at", "finance_hold_by_name"]
+        read_only_fields = ["enrolled_at", "updated_at",
+                            "finance_hold", "finance_hold_reason", "finance_hold_at", "finance_hold_by_name"]
+
+    def get_finance_hold_by_name(self, obj) -> str | None:
+        u = obj.finance_hold_by
+        if not u:
+            return None
+        return (f"{u.first_name} {u.last_name}".strip() or u.email)
 
     def get_guardians(self, obj) -> list:
         links = StudentGuardian.objects.filter(student=obj).select_related("guardian")
@@ -149,6 +160,10 @@ class StudentViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSe
     def get_permissions(self):
         if self.action in ("create", "update", "partial_update", "destroy"):
             return [permissions.IsAuthenticated(), IsAdminUser()]
+        if self.action == "set_finance_hold":
+            # Placing/lifting an academic hold is a finance action — admins are
+            # view-only on finance and cannot do it (separation of duties).
+            return [permissions.IsAuthenticated(), IsFinanceOfficer()]
         return [permissions.IsAuthenticated()]
 
     # perform_destroy comes from SoftDeleteViewSetMixin: DELETE now moves the
@@ -161,10 +176,61 @@ class StudentViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSe
         """Full data payload consumed by the report-card generator."""
         from apps.marks.services import build_report_card_data
         student = self.get_object()
+        # Finance hold blocks the student themselves and their guardians from
+        # seeing the report card; staff (admin/teacher/finance) are unaffected.
+        if student.finance_hold and request.user.role in ("student", "guardian"):
+            return Response(
+                {"detail": "Your report card is on hold due to an outstanding balance. "
+                           "Please contact the finance office."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         year = AcademicYear.objects.filter(is_current=True).first()
         if not year:
             return Response({"detail": "No active academic year."}, status=400)
         return Response(build_report_card_data(student, year))
+
+    @action(detail=True, methods=["post"], url_path="finance-hold")
+    def set_finance_hold(self, request, pk=None):
+        """Finance officer places or lifts an academic hold on this student."""
+        from django.utils import timezone
+        student = self.get_object()
+        hold = bool(request.data.get("finance_hold"))
+        reason = (request.data.get("reason") or "").strip()[:255]
+        student.finance_hold = hold
+        student.finance_hold_reason = reason if hold else ""
+        student.finance_hold_at = timezone.now() if hold else None
+        student.finance_hold_by = request.user if hold else None
+        student.save(update_fields=["finance_hold", "finance_hold_reason",
+                                    "finance_hold_at", "finance_hold_by"])
+        log_action(
+            action=AuditAction.UPDATE, module="Finance", request=request, obj=student,
+            description=f"{'Placed' if hold else 'Lifted'} academic finance hold on {student.full_name}"
+                       + (f": {reason}" if hold and reason else ""),
+        )
+        # Notify the student + guardians of the hold change (best-effort).
+        try:
+            from apps.users.models import Notification
+            title = "Academic access on hold" if hold else "Academic hold lifted"
+            body = (f"Your academic records are on hold due to an outstanding balance. {reason}".strip()
+                    if hold else "Your academic hold has been lifted. You can view your results again.")
+            recipients = []
+            if getattr(student, "user_id", None):
+                recipients.append(student.user)
+            for g in student.guardians.all():
+                if getattr(g, "user_id", None):
+                    recipients.append(g.user)
+            for r in recipients:
+                Notification.send(
+                    recipient=r, type=Notification.Type.FEE_REMINDER, title=title, body=body,
+                    module="Finance", action_type="finance_hold",
+                    priority=Notification.Priority.HIGH if hold else Notification.Priority.NORMAL,
+                    related_object_id=student.id,
+                )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Failed to send finance-hold notifications")
+        return Response({"finance_hold": student.finance_hold,
+                         "finance_hold_reason": student.finance_hold_reason})
 
 
 class GuardianViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):

@@ -5,13 +5,54 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
-from .models import Mark, GradingScale, AssessmentTemplate, ConductCategory, ConductRating, PromotionDecision
-from apps.students.models import Student
+from .models import (
+    Mark, GradingScale, AssessmentTemplate, ConductCategory, ConductRating,
+    PromotionDecision, AcademicTaskWindow,
+)
+from .services import find_locking_window, MARK_TASK_TYPES
+from apps.students.models import Student, Class
 from apps.users.views import IsAdminUser, IsAdminOrTeacher, scope_to_own_student
 from apps.trash.mixins import SoftDeleteViewSetMixin
 from apps.audit.mixins import AuditLogMixin
 from apps.audit.models import AuditAction
 from apps.audit.services import log_action
+
+
+# ── Academic-duty deadline enforcement (Phase 4) ─────────────────────
+LOCKED_MESSAGE = "This academic task is now locked. Please contact the Admin for help."
+
+
+def assert_task_open(task_types, *, user, student, subject, semester):
+    """Raise 403 if a teacher's write to this scope is locked by an admin task
+    window. Admins (and other roles) bypass. Safe-additive: no window ⇒ allowed."""
+    if getattr(user, "role", None) != "teacher":
+        return
+    teacher = getattr(user, "teacher_profile", None)
+    assigned_class = getattr(student, "current_class", None)
+    academic_year = getattr(assigned_class, "academic_year", None)
+    win = find_locking_window(
+        task_types, teacher=teacher, assigned_class=assigned_class,
+        subject=subject, semester=semester, academic_year=academic_year,
+    )
+    if win is not None:
+        raise PermissionDenied(LOCKED_MESSAGE)
+
+
+def bulk_scope_locked(task_types, *, teacher, class_id, subject_id, semester_id, cache, year_cache):
+    """Cached lock check for bulk upserts (teacher writes only). Returns True if
+    the (class, subject, semester) scope is currently locked by an admin window,
+    so the caller can skip those records the same way it skips unassigned ones."""
+    key = (class_id, subject_id, semester_id)
+    if key not in cache:
+        if class_id not in year_cache:
+            year_cache[class_id] = Class.objects.filter(pk=class_id).values_list(
+                "academic_year_id", flat=True).first()
+        win = find_locking_window(
+            task_types, teacher=teacher, assigned_class=class_id,
+            subject=subject_id, semester=semester_id, academic_year=year_cache[class_id],
+        )
+        cache[key] = win is not None
+    return cache[key]
 
 
 class GradingScaleSerializer(serializers.ModelSerializer):
@@ -163,7 +204,12 @@ class MarkViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
     filterset_fields   = ["student", "subject", "semester", "is_locked"]
 
     def get_queryset(self):
-        return scope_to_own_student(super().get_queryset(), self.request.user)
+        qs = scope_to_own_student(super().get_queryset(), self.request.user)
+        # Finance hold blocks a student / their guardians from seeing results;
+        # staff (admin/teacher/finance) are unaffected.
+        if self.request.user.role in ("student", "guardian"):
+            qs = qs.filter(student__finance_hold=False)
+        return qs
 
     def get_permissions(self):
         if self.action in ("create", "update", "partial_update", "destroy", "bulk"):
@@ -181,13 +227,20 @@ class MarkViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
             raise PermissionDenied("You are not assigned to this class/subject.")
 
     def perform_create(self, serializer):
-        self._check_teacher_scope(serializer.validated_data["student"], serializer.validated_data["subject"])
+        v = serializer.validated_data
+        self._check_teacher_scope(v["student"], v["subject"])
+        assert_task_open(MARK_TASK_TYPES, user=self.request.user,
+                         student=v["student"], subject=v["subject"], semester=v["semester"])
         super().perform_create(serializer)
 
     def perform_update(self, serializer):
-        student = serializer.validated_data.get("student", serializer.instance.student)
-        subject = serializer.validated_data.get("subject", serializer.instance.subject)
+        v = serializer.validated_data
+        student  = v.get("student",  serializer.instance.student)
+        subject  = v.get("subject",  serializer.instance.subject)
+        semester = v.get("semester", serializer.instance.semester)
         self._check_teacher_scope(student, subject)
+        assert_task_open(MARK_TASK_TYPES, user=self.request.user,
+                         student=student, subject=subject, semester=semester)
         super().perform_update(serializer)
 
     @action(detail=False, methods=["post"], url_path="bulk")
@@ -196,6 +249,7 @@ class MarkViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
         user    = request.user
         teacher = getattr(user, "teacher_profile", None)
         created = updated = 0
+        saved   = []
 
         # A teacher may only upsert marks for their own assigned class/subject pairs.
         allowed_pairs = None
@@ -208,6 +262,7 @@ class MarkViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
             )
 
         class_id_cache = {}
+        lock_cache, year_cache = {}, {}
 
         with transaction.atomic():
             for rec in request.data.get("records", []):
@@ -222,8 +277,14 @@ class MarkViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
                         class_id_cache[student_id] = Student.objects.filter(
                             pk=student_id
                         ).values_list("current_class_id", flat=True).first()
-                    if (class_id_cache[student_id], subject_id) not in allowed_pairs:
+                    class_id = class_id_cache[student_id]
+                    if (class_id, subject_id) not in allowed_pairs:
                         continue  # teacher not assigned to this class/subject
+                    # Skip records whose deadline window is closed/read-only.
+                    if bulk_scope_locked(MARK_TASK_TYPES, teacher=teacher, class_id=class_id,
+                                         subject_id=subject_id, semester_id=semester_id,
+                                         cache=lock_cache, year_cache=year_cache):
+                        continue
 
                 # all_objects: a matching mark may exist but be trashed —
                 # restore it instead of trying to create a duplicate, which
@@ -250,6 +311,7 @@ class MarkViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
                     serializer.save(recorded_by=teacher)
                 else:
                     serializer.save()
+                saved.append(serializer.instance)
 
                 if instance is None:
                     created += 1
@@ -262,6 +324,14 @@ class MarkViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
                 description=f"Bulk marks entry: {created} created, {updated} updated",
                 new_value={"created": created, "updated": updated},
             )
+
+        # Notify students / guardians that marks were published (best-effort).
+        try:
+            from apps.notifications.services import notify_marks_published
+            notify_marks_published(saved)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Failed to send marks notifications")
 
         return Response({"created": created, "updated": updated})
 
@@ -308,12 +378,19 @@ class ConductRatingViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.Model
             raise PermissionDenied("You are not assigned to this class.")
 
     def perform_create(self, serializer):
-        self._check_teacher_scope(serializer.validated_data["student"])
+        v = serializer.validated_data
+        self._check_teacher_scope(v["student"])
+        assert_task_open(("conduct",), user=self.request.user, student=v["student"],
+                         subject=None, semester=v["semester"])
         super().perform_create(serializer)
 
     def perform_update(self, serializer):
-        student = serializer.validated_data.get("student", serializer.instance.student)
+        v = serializer.validated_data
+        student  = v.get("student",  serializer.instance.student)
+        semester = v.get("semester", serializer.instance.semester)
         self._check_teacher_scope(student)
+        assert_task_open(("conduct",), user=self.request.user, student=student,
+                         subject=None, semester=semester)
         super().perform_update(serializer)
 
     @action(detail=False, methods=["post"], url_path="bulk")
@@ -333,6 +410,7 @@ class ConductRatingViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.Model
             )
 
         class_id_cache = {}
+        lock_cache, year_cache = {}, {}
 
         with transaction.atomic():
             for rec in request.data.get("records", []):
@@ -347,8 +425,14 @@ class ConductRatingViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.Model
                         class_id_cache[student_id] = Student.objects.filter(
                             pk=student_id
                         ).values_list("current_class_id", flat=True).first()
-                    if class_id_cache[student_id] not in allowed_class_ids:
+                    class_id = class_id_cache[student_id]
+                    if class_id not in allowed_class_ids:
                         continue  # teacher not assigned to this class
+                    # Conduct windows are not subject-scoped (subject_id=None).
+                    if bulk_scope_locked(("conduct",), teacher=teacher, class_id=class_id,
+                                         subject_id=None, semester_id=semester_id,
+                                         cache=lock_cache, year_cache=year_cache):
+                        continue
 
                 # all_objects: a matching rating may exist but be trashed —
                 # restore it instead of trying to create a duplicate, which
@@ -404,3 +488,130 @@ class PromotionDecisionViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.M
         if self.action in ("create", "update", "partial_update", "destroy"):
             return [permissions.IsAuthenticated(), IsAdminUser()]
         return [permissions.IsAuthenticated()]
+
+
+# ── Academic task windows (Phase 4: admin-set deadlines) ─────────────
+class AcademicTaskWindowSerializer(serializers.ModelSerializer):
+    task_type_display = serializers.CharField(source="get_task_type_display", read_only=True)
+    status_display    = serializers.CharField(source="get_status_display", read_only=True)
+    effective_status  = serializers.SerializerMethodField()
+    is_editable_now   = serializers.ReadOnlyField()
+    class_name        = serializers.SerializerMethodField()
+    subject_name      = serializers.SerializerMethodField()
+    teacher_name      = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = AcademicTaskWindow
+        fields = ["id", "task_type", "task_type_display", "academic_year",
+                  "semester", "assigned_class", "class_name", "subject", "subject_name",
+                  "teacher", "teacher_name", "open_at", "close_at", "status",
+                  "status_display", "effective_status", "is_editable_now", "note",
+                  "created_at", "updated_at"]
+        read_only_fields = ["created_at", "updated_at"]
+
+    def get_effective_status(self, obj) -> str:
+        return obj.effective_status()
+
+    def get_class_name(self, obj) -> str | None:
+        return str(obj.assigned_class) if obj.assigned_class else None
+
+    def get_subject_name(self, obj) -> str | None:
+        return obj.subject.name if obj.subject else None
+
+    def get_teacher_name(self, obj) -> str | None:
+        return obj.teacher.full_name if obj.teacher else None
+
+    def validate(self, attrs):
+        open_at  = attrs.get("open_at",  getattr(self.instance, "open_at", None))
+        close_at = attrs.get("close_at", getattr(self.instance, "close_at", None))
+        if open_at and close_at and close_at < open_at:
+            raise serializers.ValidationError({"close_at": "Close time must be after open time."})
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        if request and request.user and request.user.is_authenticated:
+            validated_data.setdefault("created_by", request.user)
+        return super().create(validated_data)
+
+
+def _notify_affected_teachers(window, verb):
+    """In-app notice to the teacher(s) a window affects, when an admin opens,
+    closes, extends or reopens it. Scoped to the pinned class/subject when set,
+    otherwise the named teacher, otherwise all active teachers."""
+    from apps.teachers.models import Teacher, TeacherAssignment
+    from apps.users.models import Notification
+
+    teachers = Teacher.objects.filter(is_active=True)
+    if window.teacher_id:
+        teachers = teachers.filter(id=window.teacher_id)
+    elif window.assigned_class_id or window.subject_id:
+        assign = TeacherAssignment.objects.filter(is_active=True)
+        if window.assigned_class_id:
+            assign = assign.filter(assigned_class_id=window.assigned_class_id)
+        if window.subject_id:
+            assign = assign.filter(subject_id=window.subject_id)
+        teachers = teachers.filter(id__in=set(assign.values_list("teacher_id", flat=True)))
+
+    status = window.effective_status()
+    scope  = str(window.assigned_class) if window.assigned_class else "all classes"
+    title  = f"Academic task {verb}: {window.get_task_type_display()}"
+    body   = (f"{window.get_task_type_display()} for {scope} is now "
+              f"{dict(AcademicTaskWindow.Status.choices).get(status, status)}."
+              + (f" Closes {window.close_at:%d %b %Y %H:%M}." if window.close_at and status == 'open' else ""))
+    prio = Notification.Priority.HIGH if status != "open" else Notification.Priority.NORMAL
+    for t in teachers.select_related("user"):
+        if t.user_id:
+            Notification.send(
+                recipient=t.user, type=Notification.Type.GENERAL, title=title, body=body,
+                module="Academic Deadlines", action_type=f"deadline_{verb}",
+                related_object_id=window.id, priority=prio,
+                metadata={"window_id": window.id, "task_type": window.task_type, "status": status},
+            )
+
+
+class AcademicTaskWindowViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
+    audit_module = "Academic Deadlines"
+    audit_create_action = audit_update_action = audit_delete_action = AuditAction.SETTINGS_CHANGE
+    queryset = AcademicTaskWindow.objects.select_related(
+        "academic_year", "semester", "assigned_class", "subject", "teacher"
+    ).all()
+    serializer_class   = AcademicTaskWindowSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends    = [DjangoFilterBackend]
+    filterset_fields   = ["task_type", "academic_year", "semester", "assigned_class", "subject", "teacher", "status"]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = super().get_queryset()
+        if user.role == "admin":
+            return qs
+        if user.role == "teacher":
+            from django.db.models import Q
+            teacher = getattr(user, "teacher_profile", None)
+            if not teacher:
+                return qs.none()
+            # Windows that can affect this teacher: targeted at them, or untargeted.
+            return qs.filter(Q(teacher__isnull=True) | Q(teacher=teacher))
+        return qs.none()  # students/guardians/finance don't see deadline config
+
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [permissions.IsAuthenticated(), IsAdminUser()]
+        return [permissions.IsAuthenticated()]
+
+    def perform_create(self, serializer):
+        super().perform_create(serializer)
+        try:
+            _notify_affected_teachers(serializer.instance, "opened")
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Failed to notify teachers of new task window")
+
+    def perform_update(self, serializer):
+        super().perform_update(serializer)
+        try:
+            _notify_affected_teachers(serializer.instance, "updated")
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Failed to notify teachers of task-window update")

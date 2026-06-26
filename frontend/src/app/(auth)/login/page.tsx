@@ -18,6 +18,15 @@ export default function LoginPage() {
   const router = useRouter();
   const { login, isAuthenticated, isLoading, error, clearError } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
+  // Read directly off the URL (not useSearchParams, which would force a
+  // Suspense boundary). Set by client.ts endSession() when the refresh
+  // token expired and the user was bounced here.
+  const [sessionExpired, setSessionExpired] = useState(false);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setSessionExpired(new URLSearchParams(window.location.search).get("session") === "expired");
+    }
+  }, []);
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -65,6 +74,13 @@ export default function LoginPage() {
           </h1>
           <p className="text-xs text-[#5A6A8A] mt-1">School Management System · Monrovia, Liberia</p>
         </div>
+
+        {/* Session-expired notice (cleared once the user starts a new login) */}
+        {sessionExpired && !error && (
+          <div className="mb-4 px-4 py-3 bg-[var(--gold-pale)] border border-[rgba(200,168,75,0.3)] rounded-lg text-sm text-[var(--gold-dim)]">
+            Your session expired. Please sign in again to continue.
+          </div>
+        )}
 
         {/* Error */}
         {error && (
