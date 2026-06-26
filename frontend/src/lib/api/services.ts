@@ -56,6 +56,11 @@ export const authApi = {
     api.post<{ access: string }>("/api/auth/refresh/", { refresh }).then((r) => r.data),
   logout:  (refresh: string) =>
     api.post("/api/auth/logout/", { refresh }),
+  // Records a session-lifecycle event for the audit trail. For logout-type
+  // events ("timeout"/"forced") pass the refresh token so the server can
+  // blacklist it. Best-effort — never block the UX on this.
+  sessionEvent: (event: "extended" | "timeout" | "forced", refresh?: string, reason?: string) =>
+    api.post("/api/auth/session-event/", { event, refresh, reason }),
   me:      () => one<AuthUser>("/api/users/me/"),
   changePassword: (old_password: string, new_password: string) =>
     api.post("/api/users/change-password/", { old_password, new_password }),
