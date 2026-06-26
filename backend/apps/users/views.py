@@ -6,6 +6,8 @@ import django_filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenBlacklistView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.views import APIView
 
 from apps.trash.mixins import SoftDeleteViewSetMixin
 from apps.audit.mixins import AuditLogMixin
@@ -66,6 +68,52 @@ class SMSLogoutView(TokenBlacklistView):
                 object_name=actor.email, description=f"Signed out: {actor.email}",
             )
         return response
+
+
+class SessionEventView(APIView):
+    """Records session-lifecycle events the frontend can't express through the
+    normal login/logout endpoints — automatic idle timeout, a user extending
+    their session, or a forced (security) logout. Each maps to a distinct audit
+    action so the trail captures the *reason* a session ended, not just "logout".
+
+    For the logout-type events (`timeout`/`forced`) the caller may include its
+    `refresh` token, which we blacklist here so the session is truly invalidated
+    server-side before the client clears local storage."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    EVENTS = {
+        "extended": (AuditAction.SESSION_EXTENDED, "Session extended by user"),
+        "timeout":  (AuditAction.SESSION_TIMEOUT,  "Automatic timeout (inactivity)"),
+        "forced":   (AuditAction.FORCED_LOGOUT,    "Forced logout (security)"),
+    }
+
+    def post(self, request, *args, **kwargs):
+        event = (request.data.get("event") or "").strip()
+        if event not in self.EVENTS:
+            return Response({"detail": "Unknown session event."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        action, default_reason = self.EVENTS[event]
+        reason = (request.data.get("reason") or default_reason).strip()
+        actor = request.user
+
+        # Invalidate the refresh token for logout-type events (best-effort —
+        # an already-expired/blacklisted token shouldn't surface an error).
+        if event in ("timeout", "forced"):
+            refresh = request.data.get("refresh")
+            if refresh:
+                try:
+                    RefreshToken(refresh).blacklist()
+                except Exception:
+                    pass
+
+        log_action(
+            action=action, module="Auth", request=request, actor=actor,
+            object_name=getattr(actor, "email", ""),
+            description=f"{reason}: {getattr(actor, 'email', '')}",
+        )
+        return Response({"detail": "recorded"})
 
 
 # ── User serializers ────────────────────────────────────────────

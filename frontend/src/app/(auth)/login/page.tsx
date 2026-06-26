@@ -21,10 +21,15 @@ export default function LoginPage() {
   // Read directly off the URL (not useSearchParams, which would force a
   // Suspense boundary). Set by client.ts endSession() when the refresh
   // token expired and the user was bounced here.
-  const [sessionExpired, setSessionExpired] = useState(false);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setSessionExpired(new URLSearchParams(window.location.search).get("session") === "expired");
+      const reason = new URLSearchParams(window.location.search).get("session");
+      if (reason === "timeout") {
+        setSessionNotice("Your session has expired due to inactivity. Please sign in again.");
+      } else if (reason === "expired") {
+        setSessionNotice("Your session expired. Please sign in again to continue.");
+      }
     }
   }, []);
 
@@ -75,10 +80,10 @@ export default function LoginPage() {
           <p className="text-xs text-[#5A6A8A] mt-1">School Management System · Monrovia, Liberia</p>
         </div>
 
-        {/* Session-expired notice (cleared once the user starts a new login) */}
-        {sessionExpired && !error && (
+        {/* Session-ended notice (cleared once the user starts a new login) */}
+        {sessionNotice && !error && (
           <div className="mb-4 px-4 py-3 bg-[var(--gold-pale)] border border-[rgba(200,168,75,0.3)] rounded-lg text-sm text-[var(--gold-dim)]">
-            Your session expired. Please sign in again to continue.
+            {sessionNotice}
           </div>
         )}
 

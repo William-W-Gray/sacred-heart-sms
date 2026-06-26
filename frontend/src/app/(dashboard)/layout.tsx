@@ -12,6 +12,7 @@ import { useAuthStore } from "@/store/auth.store";
 import { cn } from "@/lib/utils/cn";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import { NotificationBell } from "@/components/shared/NotificationBell";
+import { SessionTimeoutGuard } from "@/components/shared/SessionTimeoutGuard";
 import type { UserRole } from "@/types";
 
 type NavItem = { href: string; icon: React.ElementType; label: string; roles?: UserRole[] };
@@ -169,6 +170,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--surface)]">
       <OfflineBanner />
+      <SessionTimeoutGuard />
       {/* Mobile backdrop */}
       {sidebarOpen && (
         <div

@@ -12,6 +12,9 @@ const PAGE_SIZES = [5, 10, 20, 50, 100];
 const ACTION_STYLE: Record<string, string> = {
   login:                  "bg-emerald-50 text-emerald-700 border-emerald-200",
   logout:                 "bg-slate-50 text-slate-600 border-slate-200",
+  session_timeout:        "bg-orange-50 text-orange-700 border-orange-200",
+  session_extended:       "bg-emerald-50 text-emerald-700 border-emerald-200",
+  forced_logout:          "bg-red-100 text-red-800 border-red-300",
   create:                 "bg-sky-50 text-sky-700 border-sky-200",
   update:                 "bg-amber-50 text-amber-700 border-amber-200",
   delete:                 "bg-rose-50 text-rose-700 border-rose-200",

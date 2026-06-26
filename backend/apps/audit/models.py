@@ -18,6 +18,9 @@ from django.db import models
 class AuditAction(models.TextChoices):
     LOGIN                  = "login",                  "Login"
     LOGOUT                 = "logout",                 "Logout"
+    SESSION_TIMEOUT        = "session_timeout",        "Automatic Session Timeout"
+    SESSION_EXTENDED       = "session_extended",       "Session Extended by User"
+    FORCED_LOGOUT          = "forced_logout",          "Forced Logout"
     CREATE                 = "create",                 "Create"
     UPDATE                 = "update",                 "Update"
     DELETE                 = "delete",                 "Delete"

@@ -5,7 +5,7 @@ from django.views.static import serve as serve_static
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from apps.users.views import SMSTokenView, SMSLogoutView, UserViewSet, NotificationViewSet
+from apps.users.views import SMSTokenView, SMSLogoutView, SessionEventView, UserViewSet, NotificationViewSet
 from apps.students.views import (
     StudentViewSet, GuardianViewSet, ClassViewSet,
     SubjectViewSet, AcademicYearViewSet, SemesterViewSet,
@@ -72,6 +72,7 @@ urlpatterns = [
     path("api/auth/login/",      SMSTokenView.as_view(),       name="token_obtain"),
     path("api/auth/refresh/",    TokenRefreshView.as_view(),   name="token_refresh"),
     path("api/auth/logout/",     SMSLogoutView.as_view(),      name="token_blacklist"),
+    path("api/auth/session-event/", SessionEventView.as_view(), name="session_event"),
 
     # School profile (singleton settings; read-any, write-admin)
     path("api/school-profile/", SchoolProfileView.as_view(), name="school-profile"),
