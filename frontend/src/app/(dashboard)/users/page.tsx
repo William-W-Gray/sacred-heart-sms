@@ -2,11 +2,11 @@
 import { useState } from "react";
 import {
   Plus, Trash2, ShieldCheck, UserX, UserCheck2, Key, Edit3, Search,
-  GraduationCap, UserCheck, Phone, Mail, MapPin, Briefcase
+  GraduationCap, UserCheck, Phone, Mail, MapPin, Briefcase, LogOut
 } from "lucide-react";
 import {
   useUsers, useCreateUser, useUpdateUser, useDeleteUser,
-  useResetUserPassword, useClasses, useStudents, useGuardians,
+  useResetUserPassword, useForceLogout, useClasses, useStudents, useGuardians,
   useSubjects, useCreateSubject
 } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
@@ -648,6 +648,7 @@ export default function UsersPage() {
   const { data, isLoading } = useUsers({ page_size: 100 });
   const updateUser = useUpdateUser();
   const deleteUser = useDeleteUser();
+  const forceLogout = useForceLogout();
 
   const users = data?.results ?? [];
 
@@ -671,6 +672,17 @@ export default function UsersPage() {
       toast({ title: `${email} ${!current ? "activated" : "deactivated"}`, variant: "success" });
     } catch (err) {
       toast({ title: getApiErrorMessage(err, "Failed to update user"), variant: "error" });
+    }
+  };
+
+  const handleForceLogout = async (id: number, email: string) => {
+    const reason = prompt(`Force ${email} to log out of all sessions?\n\nOptionally give a reason (recorded in the audit trail):`, "");
+    if (reason === null) return; // cancelled
+    try {
+      const res = await forceLogout.mutateAsync({ id, reason: reason || undefined });
+      toast({ title: `${email} logged out (${res.sessions_revoked} session${res.sessions_revoked === 1 ? "" : "s"} revoked)`, variant: "success" });
+    } catch (err) {
+      toast({ title: getApiErrorMessage(err, "Failed to force logout"), variant: "error" });
     }
   };
 
@@ -870,6 +882,13 @@ export default function UsersPage() {
                               title={u.is_active ? "Deactivate user" : "Activate user"}
                             >
                               {u.is_active ? <UserX size={14} /> : <UserCheck2 size={14} />}
+                            </button>
+                            <button
+                              onClick={() => handleForceLogout(u.id, u.email)}
+                              className="p-1.5 rounded hover:bg-orange-50 text-[var(--muted)] hover:text-orange-600 transition-colors"
+                              title="Force logout (revoke all sessions)"
+                            >
+                              <LogOut size={14} />
                             </button>
                             <button
                               onClick={() => handleDelete(u.id, u.email)}

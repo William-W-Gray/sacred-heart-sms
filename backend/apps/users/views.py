@@ -1,4 +1,4 @@
-from rest_framework import serializers, viewsets, permissions, status
+from rest_framework import serializers, viewsets, permissions, status, parsers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
@@ -7,6 +7,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenBlacklistView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
 from rest_framework.views import APIView
 
 from apps.trash.mixins import SoftDeleteViewSetMixin
@@ -119,6 +120,7 @@ class SessionEventView(APIView):
 # ── User serializers ────────────────────────────────────────────
 class UserSerializer(serializers.ModelSerializer):
     profile_details = serializers.SerializerMethodField(read_only=True)
+    photo_url = serializers.SerializerMethodField(read_only=True)
 
     # Profile fields for create/update
     student_id = serializers.CharField(required=False, write_only=True, allow_blank=True)
@@ -142,11 +144,19 @@ class UserSerializer(serializers.ModelSerializer):
         model  = User
         fields = [
             "id", "email", "first_name", "last_name", "role", "is_active", "date_joined", "profile_details",
+            "photo_url", "phone", "address", "notify_sound", "notify_email", "notify_in_app",
             "student_id", "gender", "date_of_birth", "current_class",
             "employee_id", "subject", "phone_number",
-            "address", "occupation", "guardian_id", "relationship", "student_id_link", "class_ids"
+            "occupation", "guardian_id", "relationship", "student_id_link", "class_ids"
         ]
         read_only_fields = ["date_joined"]
+
+    def get_photo_url(self, obj) -> str | None:
+        if not getattr(obj, "photo", None):
+            return None
+        request = self.context.get("request")
+        url = obj.photo.url
+        return request.build_absolute_uri(url) if request else url
 
     def get_profile_details(self, obj) -> dict | None:
         sp = getattr(obj, "student_profile", None)
@@ -497,6 +507,32 @@ class ChangePasswordSerializer(serializers.Serializer):
         return attrs
 
 
+# ── Self-service profile serializer ─────────────────────────────
+class ProfileSerializer(serializers.ModelSerializer):
+    """Read + update the small set of fields a user may change about their own
+    account. Restricted fields (role, is_active, email, linked student/class/
+    subject, salary, permissions) are intentionally NOT here — they can't be set
+    through this serializer no matter what the client sends."""
+    photo_url = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model  = User
+        fields = ["id", "email", "first_name", "last_name", "role",
+                  "photo", "photo_url", "phone", "address",
+                  "notify_sound", "notify_email", "notify_in_app"]
+        # Name is part of the official record (kept in sync with the student/
+        # teacher/guardian profile) — admin-managed, not self-editable here.
+        read_only_fields = ["id", "email", "first_name", "last_name", "role", "photo_url"]
+        extra_kwargs = {"photo": {"write_only": True, "required": False, "allow_null": True}}
+
+    def get_photo_url(self, obj) -> str | None:
+        if not getattr(obj, "photo", None):
+            return None
+        request = self.context.get("request")
+        url = obj.photo.url
+        return request.build_absolute_uri(url) if request else url
+
+
 # ── Notification serializer ─────────────────────────────────────
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -530,7 +566,7 @@ class UserViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
         # it here means any authenticated user could force-set a password
         # (their own, since get_queryset still scopes non-admins to
         # themselves) without the old-password check change_password enforces.
-        if self.action in ["create", "list", "retrieve", "destroy", "partial_update", "update", "reset_password"]:
+        if self.action in ["create", "list", "retrieve", "destroy", "partial_update", "update", "reset_password", "force_logout"]:
             return [permissions.IsAuthenticated(), IsAdminUser()]
         return super().get_permissions()
 
@@ -556,9 +592,54 @@ class UserViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSet):
         )
         return Response({"detail": "Password reset successfully."})
 
+    @action(detail=True, methods=["post"], url_path="force-logout")
+    def force_logout(self, request, pk=None):
+        """Admin: forcibly end a user's sessions for security reasons.
+
+        Blacklists every outstanding refresh token the target holds, so each of
+        their tabs/devices is bounced to /login on its next token refresh (the
+        access token only lives minutes). Recorded as a FORCED_LOGOUT audit
+        event with the admin as actor and the supplied reason."""
+        target = self.get_object()
+        reason = (request.data.get("reason") or "").strip() or "Security lockout by administrator"
+
+        revoked = 0
+        for token in OutstandingToken.objects.filter(user=target):
+            _, created = BlacklistedToken.objects.get_or_create(token=token)
+            if created:
+                revoked += 1
+
+        log_action(
+            action=AuditAction.FORCED_LOGOUT, module="Auth", request=request,
+            obj=target, object_name=target.email,
+            description=f"Forced logout ({reason}): {target.email} — {revoked} session(s) revoked",
+        )
+        return Response({"detail": "User has been logged out.", "sessions_revoked": revoked})
+
     @action(detail=False, methods=["get"], url_path="me")
     def me(self, request):
-        return Response(UserSerializer(request.user).data)
+        return Response(UserSerializer(request.user, context={"request": request}).data)
+
+    @action(detail=False, methods=["get", "patch", "put"], url_path="profile",
+            parser_classes=[parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser])
+    def profile(self, request):
+        """Self-service profile for ANY authenticated role. GET returns the
+        editable subset; PATCH/PUT updates only the whitelisted safe fields
+        (photo/phone/address/notification prefs) — never role, status, links,
+        or permissions. Password is changed via the separate change-password
+        endpoint (it needs the old-password check)."""
+        user = request.user
+        if request.method == "GET":
+            return Response(ProfileSerializer(user, context={"request": request}).data)
+        serializer = ProfileSerializer(user, data=request.data, partial=True,
+                                       context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        log_action(
+            action=AuditAction.PROFILE_UPDATE, module="Users", request=request,
+            obj=user, description="Updated own profile settings",
+        )
+        return Response(ProfileSerializer(user, context={"request": request}).data)
 
     @action(detail=False, methods=["post"], url_path="change-password")
     def change_password(self, request):

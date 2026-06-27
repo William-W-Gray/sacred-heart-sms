@@ -22,6 +22,7 @@ class Command(BaseCommand):
             _seed_common.seed_subjects(self.stdout)
             _seed_common.seed_grading_scale(self.stdout)
             _seed_common.seed_conduct_categories(self.stdout)
+            _seed_common.seed_fee_types(self.stdout)
             self._seed_users_and_people()
 
         self.stdout.write(self.style.SUCCESS("✅ Seed complete."))

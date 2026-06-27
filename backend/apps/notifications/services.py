@@ -97,6 +97,57 @@ def notify_marks_published(marks):
                    related_object_id=m.id)
 
 
+def notify_invoice_created(invoices, *, created_by=None):
+    """Each new invoice notifies its student + guardians; the finance officer who
+    created them gets one confirmation summary and admins get a summary too.
+    Accepts a single invoice or a list (bulk fee assignment)."""
+    if invoices is None:
+        return
+    if not isinstance(invoices, (list, tuple)):
+        invoices = [invoices]
+    if not invoices:
+        return
+
+    for invoice in invoices:
+        student = invoice.student
+        label = invoice.fee_label or invoice.get_fee_type_display()
+        amount = f"L${float(invoice.amount):,.2f}"
+        # due_date may be a date (serializer path) or a raw string (bulk-assign
+        # path creates the instance directly, so it isn't coerced until reload).
+        due_raw = invoice.due_date
+        due = due_raw.strftime("%d %B %Y") if hasattr(due_raw, "strftime") else (str(due_raw) or "—")
+        if getattr(student, "user_id", None):
+            N.send(recipient=student.user, type=N.Type.FEE_REMINDER,
+                   title=f"New invoice · {label}",
+                   body=f"A new invoice of {amount} has been created for {label}. Due date: {due}.",
+                   module="Finance", action_type="invoice_created",
+                   related_object_id=invoice.id, priority=N.Priority.HIGH)
+        for guser in _guardian_users(student):
+            N.send(recipient=guser, type=N.Type.FEE_REMINDER,
+                   title=f"New invoice · {student.full_name}",
+                   body=f"A new invoice of {amount} has been created for {student.full_name} "
+                        f"({label}). Due date: {due}.",
+                   module="Finance", action_type="invoice_created",
+                   related_object_id=invoice.id, priority=N.Priority.HIGH)
+
+    # Finance-officer confirmation + admin summary (one notice for the batch).
+    count = len(invoices)
+    total = sum(float(inv.amount) for inv in invoices)
+    summary = (f"{count} invoice{'s' if count != 1 else ''} created"
+               f" · total L${total:,.2f}.")
+    if created_by is not None and getattr(created_by, "is_authenticated", False):
+        N.send(recipient=created_by, type=N.Type.FEE_REMINDER,
+               title="Invoices created", body=summary,
+               module="Finance", action_type="invoice_created")
+    for admin in _admins():
+        # Don't double-notify an admin who was also the creator.
+        if created_by is not None and admin.id == getattr(created_by, "id", None):
+            continue
+        N.send(recipient=admin, type=N.Type.FEE_REMINDER,
+               title="Invoices created", body=summary,
+               module="Finance", action_type="invoice_created")
+
+
 def notify_payment_recorded(payment):
     """Student + guardians + admins get a payment-recorded notice."""
     invoice = payment.invoice

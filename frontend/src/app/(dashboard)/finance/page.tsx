@@ -1,13 +1,18 @@
 "use client";
-import { useState } from "react";
-import { Plus, Receipt, Trash2, CreditCard } from "lucide-react";
-import { useInvoices, useCreateInvoice, useCreatePayment, useDeleteInvoice, useStudents } from "@/hooks/useApi";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Plus, Receipt, Trash2, CreditCard, Tag, Layers } from "lucide-react";
+import {
+  useInvoices, useCreateInvoice, useCreatePayment, useDeleteInvoice, useStudents,
+  useAssignFees, useFeeTypes, useClasses, useSemesters, useAcademicYears,
+} from "@/hooks/useApi";
 import { useToast } from "@/components/ui/toaster";
 import { useAuthStore } from "@/store/auth.store";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { QueryError } from "@/components/shared/QueryError";
 import { getApiErrorMessage } from "@/lib/utils/errors";
-import type { Invoice, PaymentMethod } from "@/types";
+import { downloadReceipt } from "@/lib/utils/receipt";
+import type { Invoice, PaymentMethod, FeeAppliesTo } from "@/types";
 
 function InvoiceModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [form, setForm] = useState({ student: "", type: "tuition", amount: "", dueDate: new Date().toISOString().split("T")[0], notes: "" });
@@ -129,9 +134,158 @@ function PaymentModal({ invoice, onClose }: { invoice: Invoice; onClose: () => v
   );
 }
 
+function AssignFeeModal({ onClose }: { onClose: () => void }) {
+  const { toast } = useToast();
+  const assignFees = useAssignFees();
+  const { data: feeTypes } = useFeeTypes({ is_active: true, page_size: 200 });
+  const { data: students } = useStudents({ page_size: 1000 });
+  const { data: classes } = useClasses({ page_size: 200 });
+  const { data: semesters } = useSemesters();
+  const { data: years } = useAcademicYears();
+
+  const [form, setForm] = useState({
+    fee_type: "", amount: "", due_date: new Date().toISOString().split("T")[0],
+    scope: "all" as FeeAppliesTo, class_id: "", student: "",
+    academic_year: "", semester: "", description: "",
+  });
+  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const feeList = feeTypes?.results ?? [];
+  const selectedFee = feeList.find((f) => String(f.id) === form.fee_type);
+
+  // Prefill amount/scope/description from the chosen fee type.
+  useEffect(() => {
+    if (!selectedFee) return;
+    setForm((f) => ({
+      ...f,
+      amount: f.amount || String(selectedFee.default_amount),
+      scope: selectedFee.applies_to,
+      class_id: selectedFee.default_class ? String(selectedFee.default_class) : f.class_id,
+      academic_year: selectedFee.academic_year ? String(selectedFee.academic_year) : f.academic_year,
+      semester: selectedFee.semester ? String(selectedFee.semester) : f.semester,
+      description: f.description || selectedFee.description || "",
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.fee_type]);
+
+  const semestersForYear = (semesters?.results ?? []).filter(
+    (s) => !form.academic_year || s.academic_year === Number(form.academic_year),
+  );
+
+  const handleSave = async () => {
+    if (!form.due_date) { toast({ title: "Due date is required.", variant: "error" }); return; }
+    if (!form.fee_type && !form.amount) { toast({ title: "Pick a fee type or enter an amount.", variant: "error" }); return; }
+    if (form.scope === "class" && !form.class_id) { toast({ title: "Select a class.", variant: "error" }); return; }
+    if (form.scope === "student" && !form.student) { toast({ title: "Select a student.", variant: "error" }); return; }
+    const payload: Record<string, unknown> = {
+      fee_type: form.fee_type ? Number(form.fee_type) : null,
+      amount: form.amount ? Number(form.amount) : undefined,
+      due_date: form.due_date,
+      scope: form.scope,
+      description: form.description,
+      academic_year: form.academic_year ? Number(form.academic_year) : undefined,
+      semester: form.semester ? Number(form.semester) : undefined,
+    };
+    if (form.scope === "class") payload.class_id = Number(form.class_id);
+    if (form.scope === "student") payload.student_ids = [Number(form.student)];
+    try {
+      const res = await assignFees.mutateAsync(payload);
+      toast({
+        title: `${res.created} invoice${res.created === 1 ? "" : "s"} created`
+          + (res.skipped ? ` · ${res.skipped} skipped (already invoiced)` : ""),
+        variant: "success",
+      });
+      onClose();
+    } catch (err) {
+      toast({ title: getApiErrorMessage(err, "Failed to assign fee"), variant: "error" });
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-deep/50 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-[20px] shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-5 sm:p-6">
+        <h2 className="text-xl font-semibold text-navy font-serif mb-1">Assign Fee</h2>
+        <p className="text-sm text-[#5A6A8A] mb-5">Raise invoices from a fee type for a student, a class, or all students.</p>
+        <div className="space-y-4">
+          <div>
+            <label className="form-label">Fee Type</label>
+            <select className="form-input" value={form.fee_type} onChange={(e) => set("fee_type", e.target.value)}>
+              <option value="">Select a fee type…</option>
+              {feeList.map((f) => <option key={f.id} value={f.id}>{f.name} — ${Number(f.default_amount).toLocaleString()}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div>
+              <label className="form-label">Amount ($) *</label>
+              <input type="number" min="0" step="0.01" className="form-input" value={form.amount} onChange={(e) => set("amount", e.target.value)} placeholder={selectedFee ? String(selectedFee.default_amount) : "0.00"} />
+            </div>
+            <div>
+              <label className="form-label">Due Date *</label>
+              <input type="date" className="form-input" value={form.due_date} onChange={(e) => set("due_date", e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className="form-label">Apply To</label>
+            <select className="form-input" value={form.scope} onChange={(e) => set("scope", e.target.value)}>
+              <option value="all">All Students</option>
+              <option value="class">Specific Class</option>
+              <option value="student">Individual Student</option>
+            </select>
+          </div>
+          {form.scope === "class" && (
+            <div>
+              <label className="form-label">Class *</label>
+              <select className="form-input" value={form.class_id} onChange={(e) => set("class_id", e.target.value)}>
+                <option value="">Select class…</option>
+                {(classes?.results ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
+          {form.scope === "student" && (
+            <div>
+              <label className="form-label">Student *</label>
+              <select className="form-input" value={form.student} onChange={(e) => set("student", e.target.value)}>
+                <option value="">Select student…</option>
+                {(students?.results ?? []).map((s) => <option key={s.id} value={s.id}>{s.full_name} — {s.student_id}</option>)}
+              </select>
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div>
+              <label className="form-label">Academic Year</label>
+              <select className="form-input" value={form.academic_year} onChange={(e) => { set("academic_year", e.target.value); set("semester", ""); }}>
+                <option value="">— Any —</option>
+                {(years?.results ?? []).map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Semester</label>
+              <select className="form-input" value={form.semester} onChange={(e) => set("semester", e.target.value)}>
+                <option value="">— Any —</option>
+                {semestersForYear.map((s) => <option key={s.id} value={s.id}>Semester {s.number}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="form-label">Description</label>
+            <input className="form-input" value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Optional note shown on the invoice" />
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-[var(--border)]">
+          <button onClick={onClose} className="btn-outline">Cancel</button>
+          <button onClick={handleSave} disabled={assignFees.isPending} className="btn-gold disabled:opacity-60">
+            {assignFees.isPending ? "Assigning…" : "Assign Fee"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function FinancePage() {
   const [page, setPage]           = useState(1);
   const [invoiceOpen, setInvOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
   const [payInvoice, setPayInv]   = useState<Invoice | null>(null);
   const { toast } = useToast();
   const { role } = useAuthStore();
@@ -164,11 +318,17 @@ export default function FinancePage() {
             <h1 className="text-2xl font-semibold text-navy font-serif">Finance Management</h1>
             <p className="text-sm text-[#5A6A8A] mt-0.5">Invoices, payments &amp; receipts</p>
           </div>
-          {canWrite ? (
-            <button onClick={() => setInvOpen(true)} className="btn-gold flex items-center gap-2"><Plus size={15} /> Create Invoice</button>
-          ) : (
-            <span className="text-[11px] font-medium text-[var(--muted)] border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 rounded-full">View only · finance officer manages entries</span>
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Link href="/finance/fee-types" className="btn-outline flex items-center gap-2"><Tag size={15} /> Fee Types</Link>
+            {canWrite ? (
+              <>
+                <button onClick={() => setAssignOpen(true)} className="btn-outline flex items-center gap-2"><Layers size={15} /> Assign Fee</button>
+                <button onClick={() => setInvOpen(true)} className="btn-gold flex items-center gap-2"><Plus size={15} /> Create Invoice</button>
+              </>
+            ) : (
+              <span className="text-[11px] font-medium text-[var(--muted)] border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 rounded-full">View only · finance officer manages entries</span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -217,7 +377,7 @@ export default function FinancePage() {
                           <p className="font-medium text-navy">{inv.student_name ?? `Student #${inv.student}`}</p>
                           <p className="text-xs text-[#5A6A8A]">{inv.student_sid ?? ""}</p>
                         </td>
-                        <td className="px-4 py-3 text-[#5A6A8A] text-xs">{inv.fee_type}</td>
+                        <td className="px-4 py-3 text-[#5A6A8A] text-xs capitalize">{inv.fee_display || inv.fee_label || inv.fee_type}</td>
                         <td className="px-4 py-3 font-mono text-sm">L${Number(inv.amount).toLocaleString()}</td>
                         <td className="px-4 py-3 font-mono text-sm text-[var(--ok)]">L${Number(inv.amount_paid ?? 0).toLocaleString()}</td>
                         <td className={`px-4 py-3 font-mono text-sm font-semibold ${balance > 0 ? "text-[var(--err)]" : "text-[var(--ok)]"}`}>L${balance.toLocaleString()}</td>
@@ -230,7 +390,23 @@ export default function FinancePage() {
                                 <CreditCard size={12} /> Pay
                               </button>
                             )}
-                            <button className="p-1.5 rounded hover:bg-[var(--surface2)] text-[#5A6A8A] hover:text-navy transition-colors" title="Receipt">
+                            <button
+                              onClick={async () => {
+                                const withReceipt = (inv.payments ?? []).filter((p) => p.receipt_id);
+                                if (!withReceipt.length) {
+                                  toast({ title: "No payment recorded yet — no receipt.", variant: "info" });
+                                  return;
+                                }
+                                const latest = withReceipt[withReceipt.length - 1];
+                                try {
+                                  await downloadReceipt(latest.receipt_id!, latest.receipt_number);
+                                } catch (err) {
+                                  toast({ title: getApiErrorMessage(err, "Could not download receipt"), variant: "error" });
+                                }
+                              }}
+                              className="p-1.5 rounded hover:bg-[var(--surface2)] text-[#5A6A8A] hover:text-navy transition-colors"
+                              title="Download latest receipt"
+                            >
                               <Receipt size={14} />
                             </button>
                             {canWrite && (
@@ -261,6 +437,7 @@ export default function FinancePage() {
       </div>
 
       <InvoiceModal open={invoiceOpen} onClose={() => setInvOpen(false)} />
+      {assignOpen && <AssignFeeModal onClose={() => setAssignOpen(false)} />}
       {payInvoice && <PaymentModal invoice={payInvoice} onClose={() => setPayInv(null)} />}
     </>
   );

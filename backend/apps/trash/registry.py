@@ -26,6 +26,7 @@ TRASH_MODELS = [
     ("conduct_rating",       "marks",     "ConductRating",      "Conduct ratings",       "__str__"),
     ("promotion_decision",   "marks",     "PromotionDecision",  "Promotion decisions",   "__str__"),
     ("academic_task_window", "marks",     "AcademicTaskWindow", "Academic deadlines",    "__str__"),
+    ("fee_type",             "finance",   "FeeType",            "Fee types",             "name"),
     ("invoice",              "finance",   "Invoice",            "Invoices",              "invoice_number"),
     ("payment",              "finance",   "Payment",            "Payments",              "__str__"),
     ("snapshot",             "snapshots", "Snapshot",           "Snapshots",             "name"),

@@ -19,6 +19,27 @@ export interface AuthUser {
   role: UserRole;
   is_active: boolean;
   date_joined: string;
+  photo_url?: string | null;
+  phone?: string;
+  address?: string;
+  notify_sound?: boolean;
+  notify_email?: boolean;
+  notify_in_app?: boolean;
+}
+
+/** Self-service profile (what /api/users/profile/ returns & accepts) */
+export interface UserProfile {
+  id: number;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: UserRole;
+  photo_url: string | null;
+  phone: string;
+  address: string;
+  notify_sound: boolean;
+  notify_email: boolean;
+  notify_in_app: boolean;
 }
 
 export interface JWTPayload {
@@ -236,6 +257,25 @@ export interface PromotionDecision {
 // ── Finance ──────────────────────────────────────────────────────
 export type InvoiceStatus = "pending" | "partial" | "paid" | "overdue" | "cancelled";
 export type PaymentMethod = "cash" | "bank_transfer" | "mobile_money" | "cheque";
+export type FeeAppliesTo = "all" | "class" | "student";
+
+export interface FeeType {
+  id: number;
+  name: string;
+  description: string;
+  default_amount: number;
+  applies_to: FeeAppliesTo;
+  applies_to_display?: string;
+  academic_year: number | null;
+  academic_year_name?: string | null;
+  semester: number | null;
+  semester_name?: string | null;
+  default_class: number | null;
+  default_class_name?: string | null;
+  is_active: boolean;
+  created_by?: number | null;
+  created_at?: string;
+}
 
 export interface Invoice {
   id: number;
@@ -245,6 +285,9 @@ export interface Invoice {
   student_sid?: string;
   semester: number | null;
   fee_type: string;
+  fee_type_ref?: number | null;
+  fee_label?: string;
+  fee_display?: string;
   amount: number;
   due_date: string;
   status: InvoiceStatus;
@@ -265,7 +308,15 @@ export interface Payment {
   received_by: number | null;
   is_verified: boolean;
   notes: string;
+  receipt_number?: string | null;
+  receipt_id?: number | null;
   created_at: string;
+}
+
+export interface FeeAssignResult {
+  created: number;
+  skipped: number;
+  invoice_numbers: string[];
 }
 
 // ── Report Card ──────────────────────────────────────────────────

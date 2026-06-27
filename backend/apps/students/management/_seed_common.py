@@ -82,3 +82,34 @@ def seed_conduct_categories(stdout):
             created += 1
     if created:
         stdout.write(f"  ✓ {created} conduct categories created")
+
+
+def seed_fee_types(stdout):
+    """Starter fee-type catalogue so the finance office has a sensible list to
+    work from out of the box (they can add more in the UI). Idempotent."""
+    from apps.finance.models import FeeType
+    from apps.students.models import AcademicYear
+    year = AcademicYear.objects.filter(is_current=True).first()
+    catalogue = [
+        ("Tuition Fee",      "Termly tuition charge",                250),
+        ("Registration Fee", "One-time enrolment/registration fee",   50),
+        ("Development Fee",   "School development levy",               40),
+        ("Exam Fee",          "Examination administration fee",        30),
+        ("Sports Fee",        "Sports & physical education",           20),
+        ("PTA Fee",           "Parent-Teacher Association dues",        15),
+        ("Graduation Fee",    "Graduation ceremony (final year)",      75),
+        ("Uniform Fee",       "School uniform",                        60),
+        ("Laboratory Fee",    "Science laboratory usage",              25),
+        ("Technology Fee",    "Computer lab & technology",             35),
+    ]
+    created = 0
+    for name, desc, amount in catalogue:
+        _, c = FeeType.objects.get_or_create(
+            name=name,
+            defaults=dict(description=desc, default_amount=amount,
+                          academic_year=year, is_active=True),
+        )
+        if c:
+            created += 1
+    if created:
+        stdout.write(f"  ✓ {created} fee types created")
