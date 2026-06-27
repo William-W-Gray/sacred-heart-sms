@@ -3,6 +3,9 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Bell, CheckCheck } from "lucide-react";
 import { useNotifications, useUnreadCount, useMarkRead, useMarkAllRead } from "@/hooks/useApi";
+import { useAuthStore } from "@/store/auth.store";
+import { useToast } from "@/components/ui/toaster";
+import { playNotificationChime, installAudioUnlock } from "@/lib/utils/sound";
 import type { Notification, NotificationPriority } from "@/types";
 
 const PRIO_DOT: Record<NotificationPriority, string> = {
@@ -29,9 +32,32 @@ export function NotificationBell() {
   const { data: notifs }    = useNotifications({ page_size: 8 });
   const markRead = useMarkRead();
   const markAll  = useMarkAllRead();
+  const { toast } = useToast();
+  // Sound is on unless the user muted it in My Settings (default-on when unset).
+  const soundEnabled = useAuthStore((s) => s.user?.notify_sound) !== false;
 
   const unread = countData?.count ?? 0;
   const items: Notification[] = notifs?.results ?? [];
+
+  // Allow the audio context to be unlocked on the first user gesture.
+  useEffect(() => { installAudioUnlock(); }, []);
+
+  // Chime + visual toast when the unread count rises (i.e. a new notification
+  // arrives via the 30s poll). The first observed value is the baseline, so we
+  // never fire on initial load. The sound is best-effort — the toast and the
+  // bell badge are the always-visible fallback even if audio is blocked.
+  const prevUnread = useRef<number | null>(null);
+  useEffect(() => {
+    if (prevUnread.current === null) { prevUnread.current = unread; return; }
+    if (unread > prevUnread.current) {
+      if (soundEnabled) playNotificationChime();
+      const latest = items[0];
+      toast({ title: latest ? `🔔 ${latest.title}` : "You have a new notification", variant: "info" });
+    }
+    prevUnread.current = unread;
+    // items deliberately excluded — we react to the count, reading items lazily.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unread, soundEnabled]);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {

@@ -8,6 +8,7 @@ import { useStudents, useTeachers, useInvoices, useAcademicYears, useSchoolProfi
 import { useAuthStore } from "@/store/auth.store";
 import { QueryError } from "@/components/shared/QueryError";
 import { TeacherDeadlinesCard } from "@/components/dashboard/TeacherDeadlinesCard";
+import { AcademicSummaryCard } from "@/components/dashboard/AcademicSummaryCard";
 import Link from "next/link";
 import type { UserRole } from "@/types";
 
@@ -293,6 +294,23 @@ export default function DashboardPage() {
         {hasError && (
           <div className="card">
             <QueryError resource="dashboard data" onRetry={retryAll} />
+          </div>
+        )}
+
+        {/* Student / guardian academic + finance summary (per linked child) */}
+        {(isStudent || isGuardian) && (students?.results?.length ?? 0) > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-serif text-lg font-semibold text-navy">
+                {isGuardian ? "Children's Summary" : "My Summary"}
+              </h3>
+              <Link href="/my-finance" className="text-xs text-navy hover:text-[var(--gold-dim)] font-medium">
+                Finance details →
+              </Link>
+            </div>
+            <div className={`grid gap-4 ${(students?.results?.length ?? 0) > 1 ? "lg:grid-cols-2" : ""}`}>
+              {students!.results.map((s) => <AcademicSummaryCard key={s.id} student={s} />)}
+            </div>
           </div>
         )}
 

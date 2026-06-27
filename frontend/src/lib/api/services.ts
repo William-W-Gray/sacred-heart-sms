@@ -6,7 +6,7 @@ import type {
   AttendanceRecord, AttendanceSummary,
   Invoice, Payment,
   Notification, ReportCard,
-  PaginatedResponse, UserRole,
+  PaginatedResponse, UserRole, UserProfile, FeeType, FeeAssignResult,
 } from "@/types";
 
 // ── User management (admin only) ─────────────────────────────────
@@ -39,6 +39,13 @@ export const usersApi = {
   /** Admin: forcibly revoke a user's sessions (security lockout) */
   forceLogout: (id: number, reason?: string) =>
     api.post<{ detail: string; sessions_revoked: number }>(`/api/users/${id}/force-logout/`, { reason }).then((r) => r.data),
+  /** Self-service: read own editable profile */
+  getProfile: () => api.get<UserProfile>("/api/users/profile/").then((r) => r.data),
+  /** Self-service: update own profile (FormData when a photo is included) */
+  updateProfile: (d: FormData | Partial<UserProfile>) =>
+    api.patch<UserProfile>("/api/users/profile/", d, {
+      headers: d instanceof FormData ? { "Content-Type": "multipart/form-data" } : {},
+    }).then((r) => r.data),
 };
 
 // ── Generic helpers ──────────────────────────────────────────────
@@ -204,10 +211,25 @@ export const financeApi = {
     create: (d: Partial<Invoice>) => create<Invoice>("/api/invoices/", d),
     update: (id: number, d: Partial<Invoice>) => update<Invoice>(`/api/invoices/${id}/`, d),
     delete: (id: number) => del(`/api/invoices/${id}/`),
+    /** Bulk fee assignment: raise invoices from a fee type for a student/class/all */
+    assign: (d: Record<string, unknown>) =>
+      api.post<FeeAssignResult>("/api/invoices/assign/", d).then((r) => r.data),
   },
   payments: {
     list:   (p?: Record<string, unknown>) => list<Payment>("/api/payments/", p),
     create: (d: Partial<Payment>) => create<Payment>("/api/payments/", d),
+  },
+  receipts: {
+    /** Fresh-rendered receipt PDF (auth-scoped) as a Blob */
+    download: (id: number) =>
+      api.get(`/api/receipts/${id}/download/`, { responseType: "blob" }).then((r) => r.data as Blob),
+  },
+  feeTypes: {
+    list:   (p?: Record<string, unknown>) => list<FeeType>("/api/fee-types/", p),
+    get:    (id: number) => one<FeeType>(`/api/fee-types/${id}/`),
+    create: (d: Partial<FeeType>) => create<FeeType>("/api/fee-types/", d),
+    update: (id: number, d: Partial<FeeType>) => update<FeeType>(`/api/fee-types/${id}/`, d),
+    delete: (id: number) => del(`/api/fee-types/${id}/`),
   },
 };
 

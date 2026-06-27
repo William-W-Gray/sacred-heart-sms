@@ -176,8 +176,15 @@ class StudentViewSet(AuditLogMixin, SoftDeleteViewSetMixin, viewsets.ModelViewSe
         """Full data payload consumed by the report-card generator."""
         from apps.marks.services import build_report_card_data
         student = self.get_object()
+        # Report cards are academic — finance officers have no access (they can
+        # see a student for billing, but not their grades/conduct/results).
+        if request.user.role == "finance_officer":
+            return Response(
+                {"detail": "Finance officers do not have access to academic report cards."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         # Finance hold blocks the student themselves and their guardians from
-        # seeing the report card; staff (admin/teacher/finance) are unaffected.
+        # seeing the report card; staff (admin/teacher) are unaffected.
         if student.finance_hold and request.user.role in ("student", "guardian"):
             return Response(
                 {"detail": "Your report card is on hold due to an outstanding balance. "

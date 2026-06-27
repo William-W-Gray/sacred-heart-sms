@@ -3,8 +3,43 @@ from decimal import Decimal
 from django.db import models
 from django.core.validators import MinValueValidator
 from django.utils import timezone
-from apps.students.models import Student, Semester
+from apps.students.models import Student, Semester, AcademicYear, Class
 from apps.trash.models import SoftDeleteModel
+
+
+class FeeType(SoftDeleteModel):
+    """A reusable fee definition the finance office manages (Tuition, Exam Fee,
+    PTA Fee…). It's a *catalogue* entry with a default amount and a default
+    scope; the actual student invoices are generated from it in the fee-
+    assignment workflow. Soft-deletable so an admin can trash/restore one
+    without losing the invoices already raised against it.
+    """
+    class AppliesTo(models.TextChoices):
+        ALL     = "all",     "All Students"
+        CLASS   = "class",   "Specific Class"
+        STUDENT = "student", "Individual Student"
+
+    name           = models.CharField(max_length=100)
+    description    = models.TextField(blank=True)
+    default_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        validators=[MinValueValidator(0)],
+    )
+    applies_to     = models.CharField(max_length=10, choices=AppliesTo.choices, default=AppliesTo.ALL)
+    academic_year  = models.ForeignKey(AcademicYear, on_delete=models.SET_NULL, null=True, blank=True, related_name="fee_types")
+    semester       = models.ForeignKey(Semester, on_delete=models.SET_NULL, null=True, blank=True, related_name="fee_types")
+    # Optional default target for a CLASS-scoped fee — a convenience pre-fill
+    # for the assignment step; the officer can still override it there.
+    default_class  = models.ForeignKey(Class, on_delete=models.SET_NULL, null=True, blank=True, related_name="fee_types")
+    is_active      = models.BooleanField(default=True)
+    created_by     = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True, related_name="+")
+    created_at     = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class Invoice(SoftDeleteModel):
@@ -26,6 +61,11 @@ class Invoice(SoftDeleteModel):
     student        = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="invoices")
     semester       = models.ForeignKey(Semester, on_delete=models.SET_NULL, null=True, blank=True)
     fee_type       = models.CharField(max_length=20, choices=FeeType.choices, default=FeeType.TUITION)
+    # Link to the managed fee-type catalogue (FeeTypeDef). `fee_label` snapshots
+    # the catalogue name at creation time so the invoice still reads correctly
+    # even if the catalogue entry is later renamed or trashed.
+    fee_type_ref   = models.ForeignKey("finance.FeeType", on_delete=models.SET_NULL, null=True, blank=True, related_name="invoices")
+    fee_label      = models.CharField(max_length=100, blank=True)
     amount         = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
     due_date       = models.DateField()
     status         = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
@@ -117,4 +157,17 @@ class Receipt(models.Model):
 
     def __str__(self) -> str:
         return f"Receipt {self.receipt_number}"
+
+    @classmethod
+    def generate_number(cls) -> str:
+        from datetime import date
+        year = date.today().year
+        last = cls.objects.filter(receipt_number__startswith=f"RCP-{year}-").order_by("-receipt_number").first()
+        seq = 1
+        if last:
+            try:
+                seq = int(last.receipt_number.split("-")[-1]) + 1
+            except ValueError:
+                pass
+        return f"RCP-{year}-{seq:04d}"
 

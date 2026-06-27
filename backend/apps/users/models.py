@@ -44,6 +44,15 @@ class User(AbstractBaseUser, PermissionsMixin, SoftDeleteModel):
     is_staff   = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
 
+    # ── Self-service profile (every role may edit these themselves) ──
+    photo      = models.ImageField(upload_to="users/photos/", null=True, blank=True)
+    phone      = models.CharField(max_length=30, blank=True)
+    address    = models.CharField(max_length=255, blank=True)
+    # Notification preferences
+    notify_sound  = models.BooleanField(default=True)   # play a sound on new in-app notifications
+    notify_email  = models.BooleanField(default=True)   # also send email for notifications
+    notify_in_app = models.BooleanField(default=True)   # show in-app notifications at all
+
     USERNAME_FIELD  = "email"
     REQUIRED_FIELDS = ["role"]
     objects = UserManager()

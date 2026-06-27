@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   studentsApi, guardiansApi, teachersApi, classesApi, subjectsApi,
   academicYearsApi, semestersApi, attendanceApi, marksApi, conductApi,
-  promotionsApi, financeApi, notificationsApi, usersApi, trashApi, snapshotsApi,
+  promotionsApi, financeApi, notificationsApi, usersApi, authApi, trashApi, snapshotsApi,
   auditApi, schoolApi, assessmentTemplatesApi, reportCardTemplateApi,
   academicTaskWindowsApi,
   type CreateUserPayload, type AuditLogParams, type SchoolProfile,
@@ -31,6 +31,7 @@ export const QK = {
   promotions:  (p?: object) => ["promotions", p] as const,
   attendance:  (p?: object) => ["attendance", p] as const,
   attSummary:  (p?: object) => ["attendance-summary", p] as const,
+  feeTypes:    (p?: object) => ["fee-types", p] as const,
   invoices:    (p?: object) => ["invoices", p] as const,
   payments:    (p?: object) => ["payments", p] as const,
   notifications: (p?: object) => ["notifications", p] as const,
@@ -42,6 +43,7 @@ export const QK = {
   reportCardTemplate: ()    => ["report-card-template"] as const,
   assessmentTemplates: (p?: object) => ["assessment-templates", p] as const,
   taskWindows: (p?: object) => ["academic-task-windows", p] as const,
+  profile:     ()           => ["profile"] as const,
 };
 
 // ── Students ─────────────────────────────────────────────────────
@@ -277,6 +279,14 @@ export const useCreateInvoice = () => {
   });
 };
 
+export const useAssignFees = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (d: Record<string, unknown>) => financeApi.invoices.assign(d),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
+  });
+};
+
 export const useCreatePayment = () => {
   const qc = useQueryClient();
   return useMutation({
@@ -294,6 +304,38 @@ export const useDeleteInvoice = () => {
     mutationFn: financeApi.invoices.delete,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["trash"] });
+    },
+  });
+};
+
+// ── Fee types (admin + finance officer) ──────────────────────────
+export const useFeeTypes = (params?: Record<string, unknown>, opts?: { enabled?: boolean }) =>
+  useQuery({ queryKey: QK.feeTypes(params), queryFn: () => financeApi.feeTypes.list(params), enabled: opts?.enabled ?? true });
+
+export const useCreateFeeType = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: financeApi.feeTypes.create,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["fee-types"] }),
+  });
+};
+
+export const useUpdateFeeType = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...d }: { id: number } & Partial<import("@/types").FeeType>) =>
+      financeApi.feeTypes.update(id, d),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["fee-types"] }),
+  });
+};
+
+export const useDeleteFeeType = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: financeApi.feeTypes.delete,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["fee-types"] });
       qc.invalidateQueries({ queryKey: ["trash"] });
     },
   });
@@ -372,6 +414,24 @@ export const useForceLogout = () =>
   useMutation({
     mutationFn: ({ id, reason }: { id: number; reason?: string }) =>
       usersApi.forceLogout(id, reason),
+  });
+
+// ── My Settings / self-service profile (all roles) ───────────────
+export const useProfile = () =>
+  useQuery({ queryKey: QK.profile(), queryFn: () => usersApi.getProfile() });
+
+export const useUpdateProfile = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (d: FormData | Record<string, unknown>) => usersApi.updateProfile(d),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.profile() }),
+  });
+};
+
+export const useChangePassword = () =>
+  useMutation({
+    mutationFn: ({ old_password, new_password }: { old_password: string; new_password: string }) =>
+      authApi.changePassword(old_password, new_password),
   });
 
 // ── Trash (admin-only) ────────────────────────────────────────────

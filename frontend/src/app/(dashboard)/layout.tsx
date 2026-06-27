@@ -6,10 +6,11 @@ import {
   LayoutDashboard, GraduationCap, Users, UserCheck,
   CalendarDays, BarChart2, Star, Trophy, FileText,
   CreditCard, School, Settings, Bell, LogOut, ChevronRight, ChevronLeft,
-  ChevronDown, Menu, X, UserCog, Trash2, Archive, ScrollText, Timer,
+  ChevronDown, Menu, X, UserCog, Trash2, Archive, ScrollText, Timer, CircleUser, Tag,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { cn } from "@/lib/utils/cn";
+import { Avatar } from "@/components/shared/Avatar";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import { NotificationBell } from "@/components/shared/NotificationBell";
 import { SessionTimeoutGuard } from "@/components/shared/SessionTimeoutGuard";
@@ -22,6 +23,7 @@ const NAV: NavSection[] = [
   { label: "Overview", items: [
     { href: "/dashboard",     icon: LayoutDashboard, label: "Dashboard" },
     { href: "/notifications", icon: Bell,            label: "Notifications" },
+    { href: "/my-settings",   icon: CircleUser,      label: "My Settings" },
   ]},
   { label: "People", roles: ["admin", "teacher", "finance_officer"], items: [
     { href: "/students",  icon: GraduationCap, label: "Students" },
@@ -44,7 +46,11 @@ const NAV: NavSection[] = [
     { href: "/report-cards", icon: FileText, label: "Report Cards" },
   ]},
   { label: "Finance", roles: ["admin", "finance_officer"], items: [
-    { href: "/finance", icon: CreditCard, label: "Finance" },
+    { href: "/finance",           icon: CreditCard, label: "Finance" },
+    { href: "/finance/fee-types", icon: Tag,        label: "Fee Types" },
+  ]},
+  { label: "Finance", roles: ["student", "guardian"], items: [
+    { href: "/my-finance", icon: CreditCard, label: "My Finance" },
   ]},
   { label: "Admin", roles: ["admin"], items: [
     { href: "/users",     icon: UserCog,    label: "User Management" },
@@ -285,11 +291,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="p-4 border-t border-[var(--border)] space-y-2">
           {/* User identity */}
           <div className={cn("flex items-center gap-2.5 px-2 py-2", collapsed && "lg:justify-center lg:px-0")} title={`${user.email}${user.first_name ? ` (${user.first_name} ${user.last_name})` : ""}`}>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#C8A84B] to-[#8B6F2A] flex items-center justify-center text-navy-deep font-bold text-xs flex-shrink-0">
-              {user.first_name && user.last_name
-                ? `${user.first_name[0]}${user.last_name[0]}`.toUpperCase()
-                : user.email.slice(0, 2).toUpperCase()}
-            </div>
+            <Avatar src={user.photo_url} firstName={user.first_name} lastName={user.last_name} email={user.email} size={32} />
             <div className={cn("flex-1 min-w-0", collapsed && "lg:hidden")}>
               <p className="text-xs font-semibold text-navy truncate">
                 {user.first_name ? `${user.first_name} ${user.last_name}`.trim() : user.email}
@@ -345,15 +347,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <span className="hidden sm:inline-flex text-[11px] font-medium text-gold-light border border-[rgba(200,168,75,0.3)] bg-[rgba(200,168,75,0.1)] px-2.5 py-1 rounded-full uppercase tracking-wider">
               {role}
             </span>
-            {/* Avatar */}
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#C8A84B] to-[#8B6F2A] flex items-center justify-center text-navy-deep font-bold text-xs flex-shrink-0">
-              {user.first_name && user.last_name
-                ? `${user.first_name[0]}${user.last_name[0]}`.toUpperCase()
-                : user.email.slice(0, 2).toUpperCase()}
-            </div>
-            <span className="hidden md:inline text-sm text-[rgba(255,255,255,0.75)] truncate max-w-[160px]">
-              {user.first_name ? `${user.first_name} ${user.last_name}`.trim() : user.email}
-            </span>
+            {/* Avatar → My Settings */}
+            <Link href="/my-settings" title="My Settings" className="flex items-center gap-2 sm:gap-3 hover:opacity-90 transition-opacity">
+              <Avatar src={user.photo_url} firstName={user.first_name} lastName={user.last_name} email={user.email} size={32} />
+              <span className="hidden md:inline text-sm text-[rgba(255,255,255,0.75)] truncate max-w-[160px]">
+                {user.first_name ? `${user.first_name} ${user.last_name}`.trim() : user.email}
+              </span>
+            </Link>
           </div>
         </header>
 
